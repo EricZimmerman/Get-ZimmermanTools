@@ -40,6 +40,8 @@ $PageContent = (Invoke-WebRequest -Uri $URL).Content
 
 $regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].zip'
 $matchdetails = $regex.Match($PageContent)
+
+write-host "Getting available programs..."
 while ($matchdetails.Success) {
     $headers = (Invoke-WebRequest -Uri $matchdetails.Value -Method Head).Headers
 
