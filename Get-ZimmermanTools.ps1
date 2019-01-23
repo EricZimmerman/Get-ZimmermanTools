@@ -64,11 +64,13 @@ while ($matchdetails.Success) {
     $getUrl = $matchdetails.Value
     $sha = $headers["x-bz-content-sha1"]
     $name = $headers["x-bz-file-name"]
+    $size = $headers["Content-Length"]
 
     $details = @{            
         Name     = $name            
         SHA1     = $sha                 
         URL     = $getUrl
+        Size    = $size
         }                           
 
     $webKeyCollection += New-Object PSObject -Property $details  
@@ -108,7 +110,8 @@ set-alias sz ".\7z\7za.exe"
 foreach($td in $toDownload)
 {
     $dUrl = $td.URL
-    write-host "Downloading $dUrl" -ForegroundColor Green
+    $size = $td.Size
+    write-host "Downloading $dUrl (Size: $size)" -ForegroundColor Green
     $destFile = Join-Path -Path . -ChildPath $td.Name
     Invoke-WebRequest -Uri $dUrl -OutFile $destFile
 
