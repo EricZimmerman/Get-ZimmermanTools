@@ -92,6 +92,7 @@ Foreach ($webKey in $webKeyCollection)
 
     if ($null -eq $localFile -or $localFile.SHA1 -ne $webKey.SHA1)
     {
+        #Needs to be downloaded since SHA is different or it doesnt exist
         $toDownload+= $webKey
     }
 }
@@ -140,10 +141,19 @@ foreach($td in $toDownload)
     }
 }
 
-#Downloaded ok contains new stuff, but $LocalKeyCollection contains existing stuff, so combine
-foreach($local in $LocalKeyCollection)
+#Downloaded ok contains new stuff, but we need to account for existing stuff too
+foreach($webItems in $webKeyCollection)
 {
-    $downloadedOK+=$local
+    #Check what we have locally to see if it also contains what is in the web collection
+    $localFile = $LocalKeyCollection | Where-Object {$_.SHA1 -eq $webKey.SHA1}
+
+    #if its not null, we have a local file match against what is on the website, so its ok
+    
+    if ($null -ne $localFile)
+    {
+        #consider it downloaded since SHAs match
+        $downloadedOK+=$webItems
+    }
 }
 
 Write-host "`nSaving downloaded version information to $localDetailsFile`n" -ForegroundColor Red
