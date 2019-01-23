@@ -111,7 +111,8 @@ foreach($td in $toDownload)
 {
     $dUrl = $td.URL
     $size = $td.Size
-    write-host "Downloading $dUrl (Size: $size)" -ForegroundColor Green
+    $name = $td.Name
+    write-host "Downloading $name (Size: $size)" -ForegroundColor Green
     $destFile = Join-Path -Path . -ChildPath $td.Name
     Invoke-WebRequest -Uri $dUrl -OutFile $destFile
 
