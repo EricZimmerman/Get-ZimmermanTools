@@ -145,7 +145,7 @@ foreach($td in $toDownload)
 foreach($webItems in $webKeyCollection)
 {
     #Check what we have locally to see if it also contains what is in the web collection
-    $localFile = $LocalKeyCollection | Where-Object {$_.SHA1 -eq $webKey.SHA1}
+    $localFile = $LocalKeyCollection | Where-Object {$_.SHA1 -eq $webItems.SHA1}
 
     #if its not null, we have a local file match against what is on the website, so its ok
     
