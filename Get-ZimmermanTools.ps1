@@ -37,9 +37,7 @@ if(!(Test-Path -Path $Dest ))
 
 $URL = "https://raw.githubusercontent.com/EricZimmerman/ericzimmerman.github.io/master/index.md"
 
-
 $WebKeyCollection = @()
-
 
 $localDetailsFile = Join-Path $Dest -ChildPath "!!!RemoteFileDetails.csv"
 
@@ -78,7 +76,7 @@ while ($matchdetails.Success) {
 
     $webKeyCollection += New-Object PSObject -Property $details  
 
-	$matchdetails = $matchdetails.NextMatch()
+    $matchdetails = $matchdetails.NextMatch()
 } 
 $progressPreference = 'Continue'
 
@@ -111,9 +109,7 @@ if (-not (test-path ".\7z\7za.exe"))
 } 
 set-alias sz ".\7z\7za.exe"  
 
-
 $downloadedOK = @()
-
 
 foreach($td in $toDownload)
 {
@@ -136,7 +132,6 @@ foreach($td in $toDownload)
     {
         $ErrorMessage = $_.Exception.Message
         write-host "Error downloading $name ($ErrorMessage). Wait for the run to finish and try again by repeating the command"
-
     }
     finally 
     {
