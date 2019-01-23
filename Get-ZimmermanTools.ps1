@@ -52,12 +52,15 @@ if (Test-Path -Path $localDetailsFile)
 $toDownload = @()
 
 #Get zips
+$progressPreference = 'silentlyContinue'
 $PageContent = (Invoke-WebRequest -Uri $URL).Content
+$progressPreference = 'Continue'
 
 $regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].zip'
 $matchdetails = $regex.Match($PageContent)
 
 write-host "Getting available programs..."
+$progressPreference = 'silentlyContinue'
 while ($matchdetails.Success) {
     $headers = (Invoke-WebRequest -Uri $matchdetails.Value -Method Head).Headers
 
@@ -77,6 +80,7 @@ while ($matchdetails.Success) {
 
 	$matchdetails = $matchdetails.NextMatch()
 } 
+$progressPreference = 'Continue'
 
 Foreach ($webKey in $webKeyCollection)
 {
@@ -107,19 +111,45 @@ if (-not (test-path ".\7z\7za.exe"))
 } 
 set-alias sz ".\7z\7za.exe"  
 
+
+$downloadedOK = @()
+
+
 foreach($td in $toDownload)
 {
-    $dUrl = $td.URL
-    $size = $td.Size
-    $name = $td.Name
-    write-host "Downloading $name (Size: $size)" -ForegroundColor Green
-    $destFile = Join-Path -Path . -ChildPath $td.Name
-    Invoke-WebRequest -Uri $dUrl -OutFile $destFile
+    try 
+    {
+        $dUrl = $td.URL
+        $size = $td.Size
+        $name = $td.Name
+        write-host "Downloading $name (Size: $size)" -ForegroundColor Green
+        $destFile = Join-Path -Path . -ChildPath $td.Name
+        $progressPreference = 'silentlyContinue'
+        Invoke-WebRequest -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
+    
+        $downloadedOK += $td
 
-    write-host "`tUnzipping to $Dest..."
-    sz x $destFile -o"$Dest" -y > $null
-    remove-item -Path $destFile
+        #write-host "`tUnzipping to $Dest..."
+        sz x $destFile -o"$Dest" -y > $null
+    }
+    catch 
+    {
+        $ErrorMessage = $_.Exception.Message
+        write-host "Error downloading $name ($ErrorMessage). Wait for the run to finish and try again by repeating the command"
+
+    }
+    finally 
+    {
+        $progressPreference = 'Continue'
+        remove-item -Path $destFile
+    }
 }
 
-Write-host "`nSaving version information to $localDetailsFile`n" -ForegroundColor Red
-$webKeyCollection | export-csv -Path  $localDetailsFile
+#Downloaded ok contains new stuff, but $LocalKeyCollection contains existing stuff, so combine
+foreach($local in $LocalKeyCollection)
+{
+    $downloadedOK+=$local
+}
+
+Write-host "`nSaving downloaded version information to $localDetailsFile`n" -ForegroundColor Red
+$downloadedOK | export-csv -Path  $localDetailsFile
