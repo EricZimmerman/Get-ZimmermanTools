@@ -54,7 +54,7 @@ $progressPreference = 'silentlyContinue'
 $PageContent = (Invoke-WebRequest -Uri $URL).Content
 $progressPreference = 'Continue'
 
-$regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].zip'
+$regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].(zip|txt)'
 $matchdetails = $regex.Match($PageContent)
 
 write-host "Getting available programs..."
@@ -126,8 +126,12 @@ foreach($td in $toDownload)
     
         $downloadedOK += $td
 
-        #write-host "`tUnzipping to $Dest..."
-        sz x $destFile -o"$Dest" -y > $null
+	if ( $name.endswith("zip") )  
+	{
+	sz x $destFile -o"$Dest" -y > $null
+	}      
+
+        
     }
     catch 
     {
