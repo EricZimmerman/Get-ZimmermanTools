@@ -128,10 +128,8 @@ foreach($td in $toDownload)
 
 	if ( $name.endswith("zip") )  
 	{
-	sz x $destFile -o"$Dest" -y > $null
+	    sz x $destFile -o"$Dest" -y > $null
 	}      
-
-        
     }
     catch 
     {
