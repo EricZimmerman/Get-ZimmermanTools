@@ -29,7 +29,7 @@ $newInstall = $false
 
 if(!(Test-Path -Path $Dest ))
 {
-    write-host $Dest + " does not exist. Creating..."
+    write-host $Dest " does not exist. Creating..."
     New-Item -ItemType directory -Path $Dest > $null
 
     $newInstall = $true
