@@ -17,8 +17,8 @@
 # Where to extract the files to
 Param
 (
-    [Parameter(Mandatory=$true)]
-    $Dest #Where to save programs to	
+    [Parameter()]
+    [string]$Dest= (Resolve-Path ".") #Where to save programs to	
 )
 
 Write-Host "`nThs script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest" -BackgroundColor Blue
@@ -43,7 +43,7 @@ $localDetailsFile = Join-Path $Dest -ChildPath "!!!RemoteFileDetails.csv"
 
 if (Test-Path -Path $localDetailsFile)
 {
-    write-host "Loading local details..."
+    write-host "Loading local details from '$Dest'..."
     $LocalKeyCollection = Import-Csv -Path $localDetailsFile
 }
 
@@ -139,7 +139,11 @@ foreach($td in $toDownload)
     finally 
     {
         $progressPreference = 'Continue'
-        remove-item -Path $destFile
+	if ( $name.endswith("zip") )  
+	{
+	    remove-item -Path $destFile
+	} 
+        
     }
 }
 
