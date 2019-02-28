@@ -139,7 +139,11 @@ foreach($td in $toDownload)
     finally 
     {
         $progressPreference = 'Continue'
-        remove-item -Path $destFile
+	if ( $name.endswith("zip") )  
+	{
+	    remove-item -Path $destFile
+	} 
+        
     }
 }
 
