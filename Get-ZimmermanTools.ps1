@@ -60,7 +60,7 @@ $matchdetails = $regex.Match($PageContent)
 write-host "Getting available programs..."
 $progressPreference = 'silentlyContinue'
 while ($matchdetails.Success) {
-    $headers = (Invoke-WebRequest -Uri $matchdetails.Value -Method Head).Headers
+    $headers = (Invoke-WebRequest -Uri $matchdetails.Value -UseBasicParsing -Method Head).Headers
 
     $getUrl = $matchdetails.Value
     $sha = $headers["x-bz-content-sha1"]
