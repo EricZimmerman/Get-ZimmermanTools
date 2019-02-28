@@ -51,7 +51,7 @@ $toDownload = @()
 
 #Get zips
 $progressPreference = 'silentlyContinue'
-$PageContent = (Invoke-WebRequest -Uri $URL).Content
+$PageContent = (Invoke-WebRequest -Uri $URL -UseBasicParsing).Content
 $progressPreference = 'Continue'
 
 $regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].(zip|txt)'
