@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Ths script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest
+    This script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest
 .DESCRIPTION
     A file will also be created in $Dest that tracks the SHA-1 of each file, so rerunning the script will only download new versions. To redownload, remove lines from or delete the CSV file created under $Dest and rerun.
 .PARAMETER Dest
