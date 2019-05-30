@@ -112,17 +112,24 @@ set-alias sz ".\7z\7za.exe"
 
 $downloadedOK = @()
 
+$i=0
+write-host "Programs to download:" $toDownload.Count
 foreach($td in $toDownload)
 {
+    $p = [math]::round( ($i/$toDownload.Count) *100, 2 )
+    
     try 
     {
         $dUrl = $td.URL
         $size = $td.Size
         $name = $td.Name
-        write-host "Downloading $name (Size: $size)" -ForegroundColor Green
+        
+	Write-Progress -Activity "Downloading...." -Status "$p% Complete" -PercentComplete $p -CurrentOperation "Downloading $name (Size: $size)" 
         $destFile = Join-Path -Path . -ChildPath $td.Name
         $progressPreference = 'silentlyContinue'
         Invoke-WebRequest -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
+
+	write-host "Downloaded $name (Size: $size)" -ForegroundColor Green
     
         $downloadedOK += $td
 
@@ -145,6 +152,7 @@ foreach($td in $toDownload)
 	} 
         
     }
+    $i+=1
 }
 
 #Downloaded ok contains new stuff, but we need to account for existing stuff too
