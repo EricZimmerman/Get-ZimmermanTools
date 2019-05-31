@@ -262,7 +262,7 @@ $name = ""
 
 $i=0
 $dlCount= $toDownload.Count
-write-color -Text "* ", "Programs to download: $dlCount" -Color Green,$defaultColor
+write-color -Text "* ", "Files to download: $dlCount" -Color Green,$defaultColor
 foreach($td in $toDownload)
 {
     $p = [math]::round( ($i/$toDownload.Count) *100, 2 )
