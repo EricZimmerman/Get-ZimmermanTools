@@ -18,7 +18,7 @@
 Param
 (
     [Parameter()]
-    [string]$Dest= (Resolve-Path ".") #Where to save programs to	
+    [string]$Dest = (Resolve-Path ".") #Where to save programs to	
 )
 
 
@@ -116,30 +116,33 @@ function Write-Color {
     $DefaultColor = $Color[0]
     if ($null -ne $BackGroundColor -and $BackGroundColor.Count -ne $Color.Count) { Write-Error "Colors, BackGroundColors parameters count doesn't match. Terminated." ; return }
     #if ($Text.Count -eq 0) { return }
-    if ($LinesBefore -ne 0) {  for ($i = 0; $i -lt $LinesBefore; $i++) { Write-Host -Object "`n" -NoNewline } } # Add empty line before
-    if ($StartTab -ne 0) {  for ($i = 0; $i -lt $StartTab; $i++) { Write-Host -Object "`t" -NoNewLine } }  # Add TABS before text
-    if ($StartSpaces -ne 0) {  for ($i = 0; $i -lt $StartSpaces; $i++) { Write-Host -Object ' ' -NoNewLine } }  # Add SPACES before text
-    if ($ShowTime) { Write-Host -Object "[$([datetime]::Now.ToString($DateTimeFormat))]" -NoNewline} # Add Time before output
+    if ($LinesBefore -ne 0) { for ($i = 0; $i -lt $LinesBefore; $i++) { Write-Host -Object "`n" -NoNewline } } # Add empty line before
+    if ($StartTab -ne 0) { for ($i = 0; $i -lt $StartTab; $i++) { Write-Host -Object "`t" -NoNewLine } }  # Add TABS before text
+    if ($StartSpaces -ne 0) { for ($i = 0; $i -lt $StartSpaces; $i++) { Write-Host -Object ' ' -NoNewLine } }  # Add SPACES before text
+    if ($ShowTime) { Write-Host -Object "[$([datetime]::Now.ToString($DateTimeFormat))]" -NoNewline } # Add Time before output
     if ($Text.Count -ne 0) {
         if ($Color.Count -ge $Text.Count) {
             # the real deal coloring
             if ($null -eq $BackGroundColor) {
                 for ($i = 0; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -NoNewLine }
-            } else {
+            }
+            else {
                 for ($i = 0; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -BackgroundColor $BackGroundColor[$i] -NoNewLine }
             }
-        } else {
+        }
+        else {
             if ($null -eq $BackGroundColor) {
                 for ($i = 0; $i -lt $Color.Length ; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -NoNewLine }
                 for ($i = $Color.Length; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $DefaultColor -NoNewLine }
-            } else {
+            }
+            else {
                 for ($i = 0; $i -lt $Color.Length ; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -BackgroundColor $BackGroundColor[$i] -NoNewLine }
                 for ($i = $Color.Length; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $DefaultColor -BackgroundColor $BackGroundColor[0] -NoNewLine }
             }
         }
     }
     if ($NoNewLine -eq $true) { Write-Host -NoNewline } else { Write-Host } # Support for no new line
-    if ($LinesAfter -ne 0) {  for ($i = 0; $i -lt $LinesAfter; $i++) { Write-Host -Object "`n" -NoNewline } }  # Add empty line after
+    if ($LinesAfter -ne 0) { for ($i = 0; $i -lt $LinesAfter; $i++) { Write-Host -Object "`n" -NoNewline } }  # Add empty line after
     if ($Text.Count -ne 0 -and $LogFile -ne "") {
         # Save to file
         $TextToFile = ""
@@ -149,10 +152,12 @@ function Write-Color {
         try {
             if ($LogTime) {
                 Write-Output -InputObject "[$([datetime]::Now.ToString($DateTimeFormat))]$TextToFile" | Out-File -FilePath $LogFile -Encoding $Encoding -Append
-            } else {
+            }
+            else {
                 Write-Output -InputObject "$TextToFile" | Out-File -FilePath $LogFile -Encoding $Encoding -Append
             }
-        } catch {
+        }
+        catch {
             $_.Exception
         }
     }
@@ -169,8 +174,7 @@ $defaultColor = (get-host).ui.rawui.ForegroundColor
 
 $newInstall = $false
 
-if(!(Test-Path -Path $Dest ))
-{
+if (!(Test-Path -Path $Dest )) {
     write-host $Dest " does not exist. Creating..."
     New-Item -ItemType directory -Path $Dest > $null
 
@@ -183,9 +187,8 @@ $WebKeyCollection = @()
 
 $localDetailsFile = Join-Path $Dest -ChildPath "!!!RemoteFileDetails.csv"
 
-if (Test-Path -Path $localDetailsFile)
-{
-    write-color -Text "* ", "Loading local details from '$Dest'..." -Color Green,$defaultColor
+if (Test-Path -Path $localDetailsFile) {
+    write-color -Text "* ", "Loading local details from '$Dest'..." -Color Green, $defaultColor
     $LocalKeyCollection = Import-Csv -Path $localDetailsFile
 }
 
@@ -199,7 +202,7 @@ $progressPreference = 'Continue'
 $regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].(zip|txt)'
 $matchdetails = $regex.Match($PageContent)
 
-write-color -Text "* ", "Getting available programs..." -Color Green,$defaultColor
+write-color -Text "* ", "Getting available programs..." -Color Green, $defaultColor
 $progressPreference = 'silentlyContinue'
 while ($matchdetails.Success) {
     $headers = (Invoke-WebRequest -Uri $matchdetails.Value -UseBasicParsing -Method Head).Headers
@@ -210,11 +213,11 @@ while ($matchdetails.Success) {
     $size = $headers["Content-Length"]
 
     $details = @{            
-        Name     = [string]$name            
-        SHA1     = [string]$sha                 
-        URL      = [string]$getUrl
-        Size     = [string]$size
-        }                           
+        Name = [string]$name            
+        SHA1 = [string]$sha                 
+        URL  = [string]$getUrl
+        Size = [string]$size
+    }                           
 
     $webKeyCollection += New-Object PSObject -Property $details  
 
@@ -222,34 +225,29 @@ while ($matchdetails.Success) {
 } 
 $progressPreference = 'Continue'
 
-Foreach ($webKey in $webKeyCollection)
-{
-    if ($newInstall)
-    {
-        $toDownload+= $webKey
+Foreach ($webKey in $webKeyCollection) {
+    if ($newInstall) {
+        $toDownload += $webKey
         continue    
     }
 
-    $localFile = $LocalKeyCollection | Where-Object {$_.Name -eq $webKey.Name}
+    $localFile = $LocalKeyCollection | Where-Object { $_.Name -eq $webKey.Name }
 
-    if ($null -eq $localFile -or $localFile.SHA1 -ne $webKey.SHA1)
-    {
+    if ($null -eq $localFile -or $localFile.SHA1 -ne $webKey.SHA1) {
         #Needs to be downloaded since SHA is different or it doesnt exist
-        $toDownload+= $webKey
+        $toDownload += $webKey
     }
 }
 
-if ($toDownload.Count -eq 0)
-{
+if ($toDownload.Count -eq 0) {
     Write-Host ""
   
-    write-color -Text "* ", "All files current. Exiting." -Color Green,Blue
+    write-color -Text "* ", "All files current. Exiting." -Color Green, Blue
     Write-Host "`n"
     return
 }
 
-if (-not (test-path ".\7z\7za.exe")) 
-{
+if (-not (test-path ".\7z\7za.exe")) {
     Write-Host "`n.\7z\7za.exe needed! Exiting`n" -BackgroundColor Red
     return
 } 
@@ -260,73 +258,65 @@ $downloadedOK = @()
 $destFile = ""
 $name = ""
 
-$i=0
-$dlCount= $toDownload.Count
-write-color -Text "* ", "Files to download: $dlCount" -Color Green,$defaultColor
-foreach($td in $toDownload)
-{
-    $p = [math]::round( ($i/$toDownload.Count) *100, 2 )
+$i = 0
+$dlCount = $toDownload.Count
+write-color -Text "* ", "Files to download: $dlCount" -Color Green, $defaultColor
+foreach ($td in $toDownload) {
+    $p = [math]::round( ($i / $toDownload.Count) * 100, 2 )
 
     #Write-Host ($td | Format-Table | Out-String)
     
-    try 
-    {
+    try {
         $dUrl = $td.URL
         $size = $td.Size
         $name = $td.Name
 
-	Write-Progress -Activity "Updating programs...." -Status "$p% Complete" -PercentComplete $p -CurrentOperation "Downloading $name" 
-	$destFile = [IO.Path]::Combine(".", $name)
+        Write-Progress -Activity "Updating programs...." -Status "$p% Complete" -PercentComplete $p -CurrentOperation "Downloading $name" 
+        $destFile = [IO.Path]::Combine(".", $name)
 
         $progressPreference = 'silentlyContinue'
         Invoke-WebRequest -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
 
-	write-color -Text "* ", "Downloaded $name (Size: $size)" -Color Green,Blue
+        write-color -Text "* ", "Downloaded $name (Size: $size)" -Color Green, Blue
     
         $downloadedOK += $td
 
-	if ( $name.endswith("zip") )  
-	{
-	    sz x $destFile -o"$Dest" -y > $null
-	}      
+        if ( $name.endswith("zip") ) {
+            sz x $destFile -o"$Dest" -y > $null
+        }      
     }
-    catch 
-    {
+    catch {
         $ErrorMessage = $_.Exception.Message
         write-host "Error downloading $name ($ErrorMessage). Wait for the run to finish and try again by repeating the command"
     }
-    finally 
-    {
+    finally {
         $progressPreference = 'Continue'
-	if ( $name.endswith("zip") )  
-	{
-	    remove-item -Path $destFile
-	} 
+        if ( $name.endswith("zip") ) {
+            remove-item -Path $destFile
+        } 
         
     }
-    $i+=1
+    $i += 1
 }
 
 #Write-Host ($webKeyCollection | Format-Table | Out-String)
 
 #Downloaded ok contains new stuff, but we need to account for existing stuff too
-foreach($webItems in $webKeyCollection)
-{
+foreach ($webItems in $webKeyCollection) {
     #Check what we have locally to see if it also contains what is in the web collection
-    $localFile = $LocalKeyCollection | Where-Object {$_.SHA1 -eq $webItems.SHA1}
+    $localFile = $LocalKeyCollection | Where-Object { $_.SHA1 -eq $webItems.SHA1 }
 
     #if its not null, we have a local file match against what is on the website, so its ok
     
-    if ($null -ne $localFile)
-    {
+    if ($null -ne $localFile) {
         #consider it downloaded since SHAs match
-        $downloadedOK+=$webItems
+        $downloadedOK += $webItems
     }
 }
 
 
 Write-Host ""
-write-color -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green,Red
+write-color -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green, Red
 Write-host "`n"
 $downloadedOK | export-csv -Path  $localDetailsFile
 
