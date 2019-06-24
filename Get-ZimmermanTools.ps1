@@ -248,13 +248,6 @@ if ($toDownload.Count -eq 0)
     return
 }
 
-if (-not (test-path ".\7z\7za.exe")) 
-{
-    Write-Host "`n.\7z\7za.exe needed! Exiting`n" -BackgroundColor Red
-    return
-} 
-set-alias sz ".\7z\7za.exe"  
-
 $downloadedOK = @()
 
 $destFile = ""
@@ -287,7 +280,7 @@ foreach($td in $toDownload)
 
 	if ( $name.endswith("zip") )  
 	{
-	    sz x $destFile -o"$Dest" -y > $null
+	    Expand-Archive -Path $destFile -DestinationPath "." -Force
 	}      
     }
     catch 
