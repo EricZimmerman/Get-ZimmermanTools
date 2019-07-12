@@ -1,0 +1,3 @@
+﻿$acert =(dir Cert:\CurrentUser\My -CodeSigningCert)[0]
+Set-AuthenticodeSignature .\Get-ZimmermanTools.ps1 -Certificate $acert
+
