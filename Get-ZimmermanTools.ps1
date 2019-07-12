@@ -32,7 +32,7 @@ function Write-Color {
         - Nice formatting options out of the box.
 	.DESCRIPTION
         Author: przemyslaw.klys at evotec.pl
-        Project website: https://evotec.xyz/hub/scripts/write-color-ps1/
+        Project website: https://evotec.xyz/hub/scripts/Write-Color-ps1/
         Project support: https://github.com/EvotecIT/PSWriteColor
         Original idea: Josh (https://stackoverflow.com/users/81769/josh)
 	.EXAMPLE
@@ -158,20 +158,25 @@ function Write-Color {
     }
 }
 
-Write-Host ""
-Write-Host "This script will discover and download all available programs" -BackgroundColor Blue
-Write-Host "from https://ericzimmerman.github.io and download them to $Dest" -BackgroundColor Blue
-Write-Host "`nA file will also be created in $Dest that tracks the SHA-1 of each file,"
-Write-Host "so rerunning the script will only download new versions."
-Write-Host "`nTo redownload, remove lines from or delete the CSV file created under $Dest and rerun. Enjoy!`n"
+Write-Color -LinesBefore 1 "This script will discover and download all available programs" -BackgroundColor Blue
+Write-Color "from https://ericzimmerman.github.io and download them to $Dest" -BackgroundColor Blue -LinesAfter 1
+Write-Color "A file will also be created in $Dest that tracks the SHA-1 of each file,"
+Write-Color "so rerunning the script will only download new versions."
+Write-Color -LinesBefore 1 -Text "To redownload, remove lines from or delete the CSV file created under $Dest and rerun. Enjoy!" -LinesAfter 1
 
-$defaultColor = (get-host).ui.rawui.ForegroundColor
+$TestColor = (Get-Host).ui.rawui.ForegroundColor
+if ($TestColor -eq -1) 
+{
+    $defaultColor = [ConsoleColor]::Gray
+} else {
+    $defaultColor = $TestColor
+}
 
 $newInstall = $false
 
 if(!(Test-Path -Path $Dest ))
 {
-    write-host $Dest " does not exist. Creating..."
+    Write-Color -Text "* ", "$Dest does not exist. Creating..." -Color Green,$defaultColor
     New-Item -ItemType directory -Path $Dest > $null
 
     $newInstall = $true
@@ -185,7 +190,7 @@ $localDetailsFile = Join-Path $Dest -ChildPath "!!!RemoteFileDetails.csv"
 
 if (Test-Path -Path $localDetailsFile)
 {
-    write-color -Text "* ", "Loading local details from '$Dest'..." -Color Green,$defaultColor
+    Write-Color -Text "* ", "Loading local details from '$Dest'..." -Color Green,$defaultColor
     $LocalKeyCollection = Import-Csv -Path $localDetailsFile
 }
 
@@ -199,7 +204,7 @@ $progressPreference = 'Continue'
 $regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].(zip|txt)'
 $matchdetails = $regex.Match($PageContent)
 
-write-color -Text "* ", "Getting available programs..." -Color Green,$defaultColor
+Write-Color -Text "* ", "Getting available programs..." -Color Green,$defaultColor
 $progressPreference = 'silentlyContinue'
 while ($matchdetails.Success) {
     $headers = (Invoke-WebRequest -Uri $matchdetails.Value -UseBasicParsing -Method Head).Headers
@@ -241,10 +246,7 @@ Foreach ($webKey in $webKeyCollection)
 
 if ($toDownload.Count -eq 0)
 {
-    Write-Host ""
-  
-    write-color -Text "* ", "All files current. Exiting." -Color Green,Blue
-    Write-Host "`n"
+    Write-Color -LinesBefore 1 -Text "* ", "All files current. Exiting." -Color Green,Blue -LinesAfter 1
     return
 }
 
@@ -255,7 +257,7 @@ $name = ""
 
 $i=0
 $dlCount= $toDownload.Count
-write-color -Text "* ", "Files to download: $dlCount" -Color Green,$defaultColor
+Write-Color -Text "* ", "Files to download: $dlCount" -Color Green,$defaultColor
 foreach($td in $toDownload)
 {
     $p = [math]::round( ($i/$toDownload.Count) *100, 2 )
@@ -274,7 +276,7 @@ foreach($td in $toDownload)
         $progressPreference = 'silentlyContinue'
         Invoke-WebRequest -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
 
-	write-color -Text "* ", "Downloaded $name (Size: $size)" -Color Green,Blue
+	Write-Color -Text "* ", "Downloaded $name (Size: $size)" -Color Green,Blue
     
         $downloadedOK += $td
 
@@ -286,7 +288,7 @@ foreach($td in $toDownload)
     catch 
     {
         $ErrorMessage = $_.Exception.Message
-        write-host "Error downloading $name ($ErrorMessage). Wait for the run to finish and try again by repeating the command"
+        Write-Color -Text "* ", "Error downloading $name ($ErrorMessage). Wait for the run to finish and try again by repeating the command" -Color Green,Red
     }
     finally 
     {
@@ -318,8 +320,85 @@ foreach($webItems in $webKeyCollection)
 }
 
 
-Write-Host ""
-write-color -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green,Red
-Write-host "`n"
+Write-Color -LinesBefore 1 -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green,$defaultColor -LinesAfter 1
+
 $downloadedOK | export-csv -Path  $localDetailsFile
 
+
+# SIG # Begin signature block
+# MIIN9QYJKoZIhvcNAQcCoIIN5jCCDeICAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUiI2NmXFrost5PgtVMuazxYnT
+# cgigggssMIIFRDCCBCygAwIBAgIQJCElLwM8LqlKqXuJPg7XgDANBgkqhkiG9w0B
+# AQsFADB9MQswCQYDVQQGEwJHQjEbMBkGA1UECBMSR3JlYXRlciBNYW5jaGVzdGVy
+# MRAwDgYDVQQHEwdTYWxmb3JkMRowGAYDVQQKExFDT01PRE8gQ0EgTGltaXRlZDEj
+# MCEGA1UEAxMaQ09NT0RPIFJTQSBDb2RlIFNpZ25pbmcgQ0EwHhcNMTcwMTI0MDAw
+# MDAwWhcNMjAwMTI0MjM1OTU5WjCBjDELMAkGA1UEBhMCVVMxDTALBgNVBBEMBDQ2
+# NTAxCzAJBgNVBAgMAklOMQ8wDQYDVQQHDAZCUkVNRU4xGDAWBgNVBAkMDzgzNjkg
+# Rk9SVFVORSBTVDEaMBgGA1UECgwRRXJpYyBSLiBaaW1tZXJtYW4xGjAYBgNVBAMM
+# EUVyaWMgUi4gWmltbWVybWFuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
+# AQEAs50rqyiMFnB6xpHDXJ+ukpwiWsyGK6W+BhU/brQ2AqaFLYiHMtJikjPu1P4o
+# hbjPmDsAATHPhIHjO4ShFtf57Ia0PGUX57pZs9+UswzZXycY+1+OlGZhjZxq0/hX
+# K5Hnb7bnLsDXl9DDtIX+/IzFifOr78AAqLmcOTvw51Mis5gMkRhFueWNaCZoCqA3
+# ZG+9saF7R7sX6V0ARJJvOB636/Slf30BnmQ/AUu38+P/R8QIfmFkd1JYLFTAiexS
+# 7oU2feSl3Ip7BjFbRBURM/s6n4IAl4RfxIwMIZZXK9SDQ/l6YVtwFjajTN1Nt/8p
+# ElgOPYQWnVyXcHD6pjlb/7CLDQIDAQABo4IBrjCCAaowHwYDVR0jBBgwFoAUKZFg
+# /4pN+uv5pmq4z/nmS71JzhIwHQYDVR0OBBYEFMU70XOGztmOZSxCzT1WXicMtytC
+# MA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMBMGA1UdJQQMMAoGCCsGAQUF
+# BwMDMBEGCWCGSAGG+EIBAQQEAwIEEDBGBgNVHSAEPzA9MDsGDCsGAQQBsjEBAgED
+# AjArMCkGCCsGAQUFBwIBFh1odHRwczovL3NlY3VyZS5jb21vZG8ubmV0L0NQUzBD
+# BgNVHR8EPDA6MDigNqA0hjJodHRwOi8vY3JsLmNvbW9kb2NhLmNvbS9DT01PRE9S
+# U0FDb2RlU2lnbmluZ0NBLmNybDB0BggrBgEFBQcBAQRoMGYwPgYIKwYBBQUHMAKG
+# Mmh0dHA6Ly9jcnQuY29tb2RvY2EuY29tL0NPTU9ET1JTQUNvZGVTaWduaW5nQ0Eu
+# Y3J0MCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5jb21vZG9jYS5jb20wHwYDVR0R
+# BBgwFoEUZXJpY0BtaWtlc3RhbW1lci5jb20wDQYJKoZIhvcNAQELBQADggEBAA37
+# Gw1WfRao+cnwJr720XgyyArQKP7YbXogH7bQ/H+ZNxIBD4QctWKvyYkCWqBxOEJN
+# PoCiE4UuTBP/qDZLCi5PaLmd6/ppw9vKw2iL/AezEmlqHPrixu37xTsqRKgImkBI
+# Oa0mbk/OqzBd0Vb0ahkeKzvMNICgx6Csk/GKaF9vYJ8lVokp1hW8r6Q9AYWXGVQ7
+# 1JJYw1QgK+uOo9rnnSN2UQIjmftN79zg1Noe9qgMqp3GFPm9QrYUdCveAbfNCYgk
+# Ju4dx/ngzQXFeCnJ6qQKHUziDrW8Hs8H5ISRY0x2gdSJ+zwrPhIJvd93KtfVTeM0
+# F1k7wmOzTdsmnBqUN3YwggXgMIIDyKADAgECAhAufIfMDpNKUv6U/Ry3zTSvMA0G
+# CSqGSIb3DQEBDAUAMIGFMQswCQYDVQQGEwJHQjEbMBkGA1UECBMSR3JlYXRlciBN
+# YW5jaGVzdGVyMRAwDgYDVQQHEwdTYWxmb3JkMRowGAYDVQQKExFDT01PRE8gQ0Eg
+# TGltaXRlZDErMCkGA1UEAxMiQ09NT0RPIFJTQSBDZXJ0aWZpY2F0aW9uIEF1dGhv
+# cml0eTAeFw0xMzA1MDkwMDAwMDBaFw0yODA1MDgyMzU5NTlaMH0xCzAJBgNVBAYT
+# AkdCMRswGQYDVQQIExJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcTB1NhbGZv
+# cmQxGjAYBgNVBAoTEUNPTU9ETyBDQSBMaW1pdGVkMSMwIQYDVQQDExpDT01PRE8g
+# UlNBIENvZGUgU2lnbmluZyBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoC
+# ggEBAKaYkGN3kTR/itHd6WcxEevMHv0xHbO5Ylc/k7xb458eJDIRJ2u8UZGnz56e
+# JbNfgagYDx0eIDAO+2F7hgmz4/2iaJ0cLJ2/cuPkdaDlNSOOyYruGgxkx9hCoXu1
+# UgNLOrCOI0tLY+AilDd71XmQChQYUSzm/sES8Bw/YWEKjKLc9sMwqs0oGHVIwXla
+# CM27jFWM99R2kDozRlBzmFz0hUprD4DdXta9/akvwCX1+XjXjV8QwkRVPJA8MUbL
+# cK4HqQrjr8EBb5AaI+JfONvGCF1Hs4NB8C4ANxS5Eqp5klLNhw972GIppH4wvRu1
+# jHK0SPLj6CH5XkxieYsCBp9/1QsCAwEAAaOCAVEwggFNMB8GA1UdIwQYMBaAFLuv
+# fgI9+qbxPISOre44mOzZMjLUMB0GA1UdDgQWBBQpkWD/ik366/mmarjP+eZLvUnO
+# EjAOBgNVHQ8BAf8EBAMCAYYwEgYDVR0TAQH/BAgwBgEB/wIBADATBgNVHSUEDDAK
+# BggrBgEFBQcDAzARBgNVHSAECjAIMAYGBFUdIAAwTAYDVR0fBEUwQzBBoD+gPYY7
+# aHR0cDovL2NybC5jb21vZG9jYS5jb20vQ09NT0RPUlNBQ2VydGlmaWNhdGlvbkF1
+# dGhvcml0eS5jcmwwcQYIKwYBBQUHAQEEZTBjMDsGCCsGAQUFBzAChi9odHRwOi8v
+# Y3J0LmNvbW9kb2NhLmNvbS9DT01PRE9SU0FBZGRUcnVzdENBLmNydDAkBggrBgEF
+# BQcwAYYYaHR0cDovL29jc3AuY29tb2RvY2EuY29tMA0GCSqGSIb3DQEBDAUAA4IC
+# AQACPwI5w+74yjuJ3gxtTbHxTpJPr8I4LATMxWMRqwljr6ui1wI/zG8Zwz3WGgiU
+# /yXYqYinKxAa4JuxByIaURw61OHpCb/mJHSvHnsWMW4j71RRLVIC4nUIBUzxt1Hh
+# UQDGh/Zs7hBEdldq8d9YayGqSdR8N069/7Z1VEAYNldnEc1PAuT+89r8dRfb7Lf3
+# ZQkjSR9DV4PqfiB3YchN8rtlTaj3hUUHr3ppJ2WQKUCL33s6UTmMqB9wea1tQiCi
+# zwxsA4xMzXMHlOdajjoEuqKhfB/LYzoVp9QVG6dSRzKp9L9kR9GqH1NOMjBzwm+3
+# eIKdXP9Gu2siHYgL+BuqNKb8jPXdf2WMjDFXMdA27Eehz8uLqO8cGFjFBnfKS5tR
+# r0wISnqP4qNS4o6OzCbkstjlOMKo7caBnDVrqVhhSgqXtEtCtlWdvpnncG1Z+G0q
+# DH8ZYF8MmohsMKxSCZAWG/8rndvQIMqJ6ih+Mo4Z33tIMx7XZfiuyfiDFJN2fWTQ
+# js6+NX3/cjFNn569HmwvqI8MBlD7jCezdsn05tfDNOKMhyGGYf6/VXThIXcDCmhs
+# u+TJqebPWSXrfOxFDnlmaOgizbjvmIVNlhE8CYrQf7woKBP7aspUjZJczcJlmAae
+# zkhb1LU3k0ZBfAfdz/pD77pnYf99SeC7MH1cgOPmFjlLpzGCAjMwggIvAgEBMIGR
+# MH0xCzAJBgNVBAYTAkdCMRswGQYDVQQIExJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAO
+# BgNVBAcTB1NhbGZvcmQxGjAYBgNVBAoTEUNPTU9ETyBDQSBMaW1pdGVkMSMwIQYD
+# VQQDExpDT01PRE8gUlNBIENvZGUgU2lnbmluZyBDQQIQJCElLwM8LqlKqXuJPg7X
+# gDAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
+# 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
+# FTAjBgkqhkiG9w0BCQQxFgQUfVdRTVSVQYPo8Fx/yExwYa/Vg7cwDQYJKoZIhvcN
+# AQEBBQAEggEAdyeVEi/n/APg5CFQ3A6WIPmq0KTmAFAkFLJy1XmxgHp+Fol8s/9S
+# AN0ztmZcaPxUio/ee/hhpFLwguebLB1xFdLnfZSkQGfqlPkKLE0P8ANfULYVBG+m
+# KxSUN9dyzmZHtqfAUzeq/a2vGos0FBH/ZkPinIfi+qYkOMR668Pvt3pTSsncFFnc
+# V5BkUiE9yhEL04iiHljxWmh/2AbMuDuZoFmeK5DjLhXhD5lIMMxpHR79p79GvWaM
+# aXXP4Ple0M1x3b5pU2f5C+C4EyUmNzEawsEUwdSflxJ7llOZpWp5fhp8C9Hn362f
+# Esd+MwVp8nM6w8Xn7dZVg5eyqdnWDTwIvg==
+# SIG # End signature block
