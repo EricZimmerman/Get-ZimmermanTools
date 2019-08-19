@@ -271,7 +271,7 @@ foreach($td in $toDownload)
         $name = $td.Name
 
 	Write-Progress -Activity "Updating programs...." -Status "$p% Complete" -PercentComplete $p -CurrentOperation "Downloading $name" 
-	$destFile = [IO.Path]::Combine(".", $name)
+	$destFile = [IO.Path]::Combine($Dest, $name)
 
         $progressPreference = 'silentlyContinue'
         Invoke-WebRequest -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
@@ -282,7 +282,7 @@ foreach($td in $toDownload)
 
 	if ( $name.endswith("zip") )  
 	{
-	    Expand-Archive -Path $destFile -DestinationPath "." -Force
+	    Expand-Archive -Path $destFile -DestinationPath $Dest -Force
 	}      
     }
     catch 
@@ -328,8 +328,8 @@ $downloadedOK | export-csv -Path  $localDetailsFile
 # SIG # Begin signature block
 # MIIN9QYJKoZIhvcNAQcCoIIN5jCCDeICAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUiI2NmXFrost5PgtVMuazxYnT
-# cgigggssMIIFRDCCBCygAwIBAgIQJCElLwM8LqlKqXuJPg7XgDANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUS7Fg9gbIgCzbGDPeK81cZ1M2
+# ZjmgggssMIIFRDCCBCygAwIBAgIQJCElLwM8LqlKqXuJPg7XgDANBgkqhkiG9w0B
 # AQsFADB9MQswCQYDVQQGEwJHQjEbMBkGA1UECBMSR3JlYXRlciBNYW5jaGVzdGVy
 # MRAwDgYDVQQHEwdTYWxmb3JkMRowGAYDVQQKExFDT01PRE8gQ0EgTGltaXRlZDEj
 # MCEGA1UEAxMaQ09NT0RPIFJTQSBDb2RlIFNpZ25pbmcgQ0EwHhcNMTcwMTI0MDAw
@@ -394,11 +394,11 @@ $downloadedOK | export-csv -Path  $localDetailsFile
 # VQQDExpDT01PRE8gUlNBIENvZGUgU2lnbmluZyBDQQIQJCElLwM8LqlKqXuJPg7X
 # gDAJBgUrDgMCGgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAjBgkqhkiG9w0BCQQxFgQUfVdRTVSVQYPo8Fx/yExwYa/Vg7cwDQYJKoZIhvcN
-# AQEBBQAEggEAdyeVEi/n/APg5CFQ3A6WIPmq0KTmAFAkFLJy1XmxgHp+Fol8s/9S
-# AN0ztmZcaPxUio/ee/hhpFLwguebLB1xFdLnfZSkQGfqlPkKLE0P8ANfULYVBG+m
-# KxSUN9dyzmZHtqfAUzeq/a2vGos0FBH/ZkPinIfi+qYkOMR668Pvt3pTSsncFFnc
-# V5BkUiE9yhEL04iiHljxWmh/2AbMuDuZoFmeK5DjLhXhD5lIMMxpHR79p79GvWaM
-# aXXP4Ple0M1x3b5pU2f5C+C4EyUmNzEawsEUwdSflxJ7llOZpWp5fhp8C9Hn362f
-# Esd+MwVp8nM6w8Xn7dZVg5eyqdnWDTwIvg==
+# FTAjBgkqhkiG9w0BCQQxFgQUJau3W/W7a17dzb1D1a6jMvwWd8YwDQYJKoZIhvcN
+# AQEBBQAEggEAWmr0RBPqdQ0YnMUMmbnfoaF8dT2tOHm4QhFu4N/D7kYxa+dXZ4mT
+# Bzetckvrlz5MSHrs3+E0G+I7BFHF/+jrsQ55dzDfAXPxt+YfopOQPjirCFBFJgTV
+# WakyCR/hzRUKg/Oce1VMfmY88Vzvgq8AjYXhq0LfRDkVJ6I8uT3UynUTho+IVG4m
+# Es09G/loKl7o26xn7PV3BSCLjd/r0muMsrzrx/+cWEafQ1598R4gl6t+5UCccHy0
+# mvWXh2M91vZNZUErHnTEhhFohZKFDbW5zn9CiBLwbYD5CmGWKPR53aBn/xV3M4+7
+# X6kRPxpvUrhY4KI7anRDwsKPpZf1tN2XNA==
 # SIG # End signature block
