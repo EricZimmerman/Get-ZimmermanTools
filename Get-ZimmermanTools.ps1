@@ -13,7 +13,7 @@
     Date:   January 22, 2019    
 #>
 
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName="NoProxy")]
 Param
 (
     [Parameter()]
