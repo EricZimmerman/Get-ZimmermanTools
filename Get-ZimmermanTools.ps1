@@ -18,7 +18,17 @@
 Param
 (
     [Parameter()]
-    [string]$Dest= (Resolve-Path ".") #Where to save programs to	
+    [string]$Dest= (Resolve-Path "."), #Where to save programs to
+    
+    #Use a proxy
+    [string]$Proxy, 
+    
+    #Credentials for proxy
+    [pscredential]$ProxyCredential,
+
+    #Use default credentials 
+    [switch]$ProxyUseDefaultCredentials 
+
 )
 
 
@@ -158,6 +168,20 @@ function Write-Color {
     }
 }
 
+#Setup proxy information for Invoke-WebRequest
+[hashtable]$IWRProxyConfig = @{}
+
+if ($Proxy){
+    $IWRProxyConfig.Add("Proxy",$Proxy)
+}
+if ($ProxyCredential){
+    $IWRProxyConfig.Add("ProxyCredential",$ProxyCredential)
+}
+if ($ProxyUseDefaultCredentials){
+    $IWRProxyConfig.Add("ProxyUseDefaultCredentials",$true)
+}
+
+
 Write-Color -LinesBefore 1 "This script will discover and download all available programs" -BackgroundColor Blue
 Write-Color "from https://ericzimmerman.github.io and download them to $Dest" -BackgroundColor Blue -LinesAfter 1
 Write-Color "A file will also be created in $Dest that tracks the SHA-1 of each file,"
@@ -198,7 +222,7 @@ $toDownload = @()
 
 #Get zips
 $progressPreference = 'silentlyContinue'
-$PageContent = (Invoke-WebRequest -Uri $URL -UseBasicParsing).Content
+$PageContent = (Invoke-WebRequest @IWRProxyConfig -Uri $URL -UseBasicParsing).Content
 $progressPreference = 'Continue'
 
 $regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].(zip|txt)'
@@ -207,7 +231,7 @@ $matchdetails = $regex.Match($PageContent)
 Write-Color -Text "* ", "Getting available programs..." -Color Green,$defaultColor
 $progressPreference = 'silentlyContinue'
 while ($matchdetails.Success) {
-    $headers = (Invoke-WebRequest -Uri $matchdetails.Value -UseBasicParsing -Method Head).Headers
+    $headers = (Invoke-WebRequest @IWRProxyConfig -Uri $matchdetails.Value -UseBasicParsing -Method Head).Headers
 
     $getUrl = $matchdetails.Value
     $sha = $headers["x-bz-content-sha1"]
@@ -274,7 +298,7 @@ foreach($td in $toDownload)
 	$destFile = [IO.Path]::Combine($Dest, $name)
 
         $progressPreference = 'silentlyContinue'
-        Invoke-WebRequest -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
+        Invoke-WebRequest @IWRProxyConfig -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
 
 	Write-Color -Text "* ", "Downloaded $name (Size: $size)" -Color Green,Blue
     
