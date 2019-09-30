@@ -312,14 +312,14 @@ foreach($td in $toDownload)
         $progressPreference = 'silentlyContinue'
         Invoke-WebRequest @IWRProxyConfig -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
 
-	Write-Color -Text "* ", "Downloaded $name (Size: $size)" -Color Green,Blue
-    
-        $downloadedOK += $td
+	Write-Color -Text "* ", "Downloaded $name (Size: $size)" -Color Green,Blue      
 
 	if ( $name.endswith("zip") )  
 	{
 	    Expand-Archive -Path $destFile -DestinationPath $Dest -Force
 	}      
+
+	$downloadedOK += $td
     }
     catch 
     {
