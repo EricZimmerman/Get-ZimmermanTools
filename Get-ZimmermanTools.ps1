@@ -245,6 +245,12 @@ $progressPreference = 'silentlyContinue'
 while ($matchdetails.Success) {
     $headers = (Invoke-WebRequest @IWRProxyConfig -Uri $matchdetails.Value -UseBasicParsing -Method Head).Headers
 
+    if ($matchdetails.Value.EndsWith('All.zip'))
+    {
+	$matchdetails = $matchdetails.NextMatch()
+    	continue
+    }
+
     $getUrl = $matchdetails.Value
     $sha = $headers["x-bz-content-sha1"]
     $name = $headers["x-bz-file-name"]
@@ -364,8 +370,8 @@ $downloadedOK | export-csv -Path  $localDetailsFile
 # SIG # Begin signature block
 # MIIOCQYJKoZIhvcNAQcCoIIN+jCCDfYCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU3h3hKI/PCw9Fhvn2sUIunz8M
-# gFmgggtAMIIFQzCCBCugAwIBAgIRAOhGMy2+0dm4G+A32Y4gvJwwDQYJKoZIhvcN
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIVTlK+nXqmKRRwg36k5vfuxE
+# VC2gggtAMIIFQzCCBCugAwIBAgIRAOhGMy2+0dm4G+A32Y4gvJwwDQYJKoZIhvcN
 # AQELBQAwfDELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdyZWF0ZXIgTWFuY2hlc3Rl
 # cjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSQw
 # IgYDVQQDExtTZWN0aWdvIFJTQSBDb2RlIFNpZ25pbmcgQ0EwHhcNMTkxMjI1MDAw
@@ -430,11 +436,11 @@ $downloadedOK | export-csv -Path  $localDetailsFile
 # dGlnbyBMaW1pdGVkMSQwIgYDVQQDExtTZWN0aWdvIFJTQSBDb2RlIFNpZ25pbmcg
 # Q0ECEQDoRjMtvtHZuBvgN9mOILycMAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEM
 # MQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQB
-# gjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSub3DNneg8U2SV
-# 3eSlV1WAf1WW3jANBgkqhkiG9w0BAQEFAASCAQBfJ7rjKfvcpG38nVyhlWsnJY5h
-# udJfTzZ4Cd5CSNnf84dPyLFqMCjk6PhCzFteJ6JimvoOiCu0N0DRYjIGaL6+iKWK
-# P5IBFWyNSmH3PN3ENjmOj0xTnKdodJ8Uos9GmYT7JXtodYpO2fxTKyq5yAwY1dY4
-# jmrDdQgseRoR99UTzVO7BZHsBbDj6mT3Jo1NVCD5fgz1CtMi++fFYlayOUPwDBr0
-# DnV0yg0wR6CPMH37Qx2Y6jRpD5Yk9BrypT50rY9ORayOL0qav4srjVVN8MwMHjcq
-# PMarEg4Hyq+Q91i4+z0xp+PwWNuwwbdrrJaQwa6FXgbC3GJgCHqTNnVbZPh2
+# gjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS+6ZdcyzjEFNEm
+# YxImSHRCSXoBQTANBgkqhkiG9w0BAQEFAASCAQBYCPGaASm/N3/8VydMg0+KFclx
+# 2wyeAYNgc6eKKeKFQmvj8e29eE6afXRqs8jwyfhIk9fW13+FMiZ03e9RerMMV+u+
+# tuzYuxDMBUYNQUtHfKCST8Ihp4co5Ctu38uwark3eFHq5VVlSDJON5mXU/1wCBMj
+# qbaIhf0U9oTp4rF/0tGIuqaTI9W0WKy+VTmC2HhXo3lDAc2BPyCx5dsKC/caH23O
+# BuFtkJPOyPtnNGvnnv+u2tanvdGyLaVlPENfERDCvjJEJxyvjNeuU/PD2alfsz6e
+# lAMLmbsRrlZf1JBymMCuPwXF0h8v9teTdkHgnUWLxw8M+nG0rLB2a7xYdknz
 # SIG # End signature block
