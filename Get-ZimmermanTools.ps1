@@ -386,7 +386,13 @@ foreach($td in $toDownload)
         $progressPreference = 'silentlyContinue'
         Invoke-WebRequest @IWRProxyConfig -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
 
-	Write-Color -Text "* ", "Downloaded $name (Size: $size)" -Color Green,Blue      
+    $extraInfo = ""
+    if ($is6)
+    {
+        $extraInfo = " (net 6)"
+    }
+
+	Write-Color -Text "* ", "Downloaded $name (Size: $size)",$extraInfo -Color Green,Blue,Red
 
 	if ( $name.endswith("zip") )  
 	{
