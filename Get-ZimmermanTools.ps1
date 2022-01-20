@@ -309,13 +309,13 @@ while ($matchdetails.Success) {
         $name = Split-Path $name -leaf
     }
 
-    $size = $headers["Content-Length"] -as [long]
+    $size = $headers["Content-Length"]
 
     $details = @{            
         Name     = [string]$name            
         SHA1     = [string]$sha                 
         URL      = [string]$getUrl
-        Size     = [long]$size
+        Size     = [string]$size
         IsNet6   = [bool]$isnet6
         }                           
 
@@ -447,8 +447,8 @@ $downloadedOK | export-csv -Path  $localDetailsFile
 # SIG # Begin signature block
 # MIIOCQYJKoZIhvcNAQcCoIIN+jCCDfYCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8BUOYh3QScVCG4neqtXEv4hj
-# pL2gggtAMIIFQzCCBCugAwIBAgIRAOhGMy2+0dm4G+A32Y4gvJwwDQYJKoZIhvcN
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdGMEhywxrEb3E8rOF4SwYTMN
+# k3mgggtAMIIFQzCCBCugAwIBAgIRAOhGMy2+0dm4G+A32Y4gvJwwDQYJKoZIhvcN
 # AQELBQAwfDELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdyZWF0ZXIgTWFuY2hlc3Rl
 # cjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSQw
 # IgYDVQQDExtTZWN0aWdvIFJTQSBDb2RlIFNpZ25pbmcgQ0EwHhcNMTkxMjI1MDAw
@@ -513,11 +513,11 @@ $downloadedOK | export-csv -Path  $localDetailsFile
 # dGlnbyBMaW1pdGVkMSQwIgYDVQQDExtTZWN0aWdvIFJTQSBDb2RlIFNpZ25pbmcg
 # Q0ECEQDoRjMtvtHZuBvgN9mOILycMAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEM
 # MQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQB
-# gjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRitw7yl5G+oYcR
-# MOQ6B8aOYPEZujANBgkqhkiG9w0BAQEFAASCAQBq558sDeyoX3+larYQKePEaFzs
-# klyxn9e2g/MR6+XihC82UDKPdYaj/OgFfBXI0a7YaL57agjvycshEq5szfpUwNcm
-# qmNmvlCEm5NtoDyca1CjuDF1Y4m3i1kLuRjAP3WkZuJAHuQLeFFLdf7/DVnBdiKn
-# SZJP4LSu1Ij/OtaTld4wTir0m8VrViJqbsqa7eFZW1VEPWytucTSyFw2VZi5tsNA
-# YmkfQB1xkCknou+inE3aPR14QPj6dxGaZo7UP71HZwpjUL194xPfYZuVoHY34CXj
-# PIRIp0RfeaYYYYSS/x7FI0rn+8uSP3HkQnGCAcUWvFgQKXbcI38ySPv7yZzq
+# gjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRHqPBqxnvj0mZ4
+# SG/qDhssEoXJdzANBgkqhkiG9w0BAQEFAASCAQBMIjVLs0NbTba3pCU3laYdeJZo
+# 8VfU1OJnPj+vLKnhdAtE3ot8RzF4z+KOz/ZAK5coPk5nkkdIrhO82hdkDgIiqkka
+# azZ2MqBrBWaFksou9irKk6rPAv9p2WagYE5ZUKDG8ne4jMycuMqsmCPAO2SPKdwz
+# VqRGrA3ky9H9jPDEkbkAyemUMPcZTQLLMgn8V+Ny2qmAY75h9ecLkAAAjn7SpwFN
+# mO3Yv4FM9vk6D82En+Ti0EE1r4T1rh8VU+BJBqQFA2RLMhe8QDGGOWQPgla57mJ2
+# bcB39IzOHmP/vL7DhLACYUO31GMAXTaH9uLKq64o2YD3y5Dq8XNzPiOZTLCv
 # SIG # End signature block
