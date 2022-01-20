@@ -203,7 +203,9 @@ Write-Color -LinesBefore 1 "This script will discover and download all available
 Write-Color "from https://ericzimmerman.github.io and download them to $Dest" -BackgroundColor Blue -LinesAfter 1
 Write-Color "A file will also be created in $Dest that tracks the SHA-1 of each file,"
 Write-Color "so rerunning the script will only download new versions."
-Write-Color -LinesBefore 1 -Text "To redownload, remove lines from or delete the CSV file created under $Dest and rerun. Enjoy!" -LinesAfter 1
+Write-Color -LinesBefore 1 -Text "To redownload, remove lines from or delete the CSV file created under $Dest and rerun. Enjoy!"
+
+Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4 or 6). Default is getting both versions" -LinesAfter 1 -BackgroundColor Green
 
 $TestColor = (Get-Host).ui.rawui.ForegroundColor
 if ($TestColor -eq -1) 
@@ -258,8 +260,7 @@ while ($matchdetails.Success) {
 	    $matchdetails = $matchdetails.NextMatch()
     	continue
     }
-
-    
+       
 
     if ($uniqueUrlhash.Contains($matchdetails.Value))
     {
@@ -308,13 +309,13 @@ while ($matchdetails.Success) {
         $name = Split-Path $name -leaf
     }
 
-    $size = $headers["Content-Length"]
+    $size = $headers["Content-Length"] -as [long]
 
     $details = @{            
         Name     = [string]$name            
         SHA1     = [string]$sha                 
         URL      = [string]$getUrl
-        Size     = [string]$size
+        Size     = [long]$size
         IsNet6   = [bool]$isnet6
         }                           
 
@@ -332,7 +333,7 @@ Foreach ($webKey in $webKeyCollection)
         continue    
     }
 
-    $localFile = $LocalKeyCollection | Where-Object {$_.Name -eq $webKey.Name}
+    $localFile = $LocalKeyCollection | Where-Object {$_.URL -eq $webKey.URL}
 
     if ($null -eq $localFile -or $localFile.SHA1 -ne $webKey.SHA1)
     {
@@ -366,7 +367,7 @@ foreach($td in $toDownload)
     try 
     {
         $dUrl = $td.URL
-        $size = $td.Size
+        $size = $td.Size -as [long]
         $name = $td.Name
         $is6 = $td.IsNet6
 
@@ -392,7 +393,9 @@ foreach($td in $toDownload)
         $extraInfo = " (net 6)"
     }
 
-	Write-Color -Text "* ", "Downloaded $name (Size: $size)",$extraInfo -Color Green,Blue,Red
+    $sizeNice = '{0:N0}' -f $size
+
+	Write-Color -Text "* ", "Downloaded $name (Size: $sizeNice)",$extraInfo -Color Green,Blue,Red
 
 	if ( $name.endswith("zip") )  
 	{
@@ -444,8 +447,8 @@ $downloadedOK | export-csv -Path  $localDetailsFile
 # SIG # Begin signature block
 # MIIOCQYJKoZIhvcNAQcCoIIN+jCCDfYCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIdVtHfhTA5zIrTk9fR+zf+CG
-# zg+gggtAMIIFQzCCBCugAwIBAgIRAOhGMy2+0dm4G+A32Y4gvJwwDQYJKoZIhvcN
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8BUOYh3QScVCG4neqtXEv4hj
+# pL2gggtAMIIFQzCCBCugAwIBAgIRAOhGMy2+0dm4G+A32Y4gvJwwDQYJKoZIhvcN
 # AQELBQAwfDELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdyZWF0ZXIgTWFuY2hlc3Rl
 # cjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSQw
 # IgYDVQQDExtTZWN0aWdvIFJTQSBDb2RlIFNpZ25pbmcgQ0EwHhcNMTkxMjI1MDAw
@@ -510,11 +513,11 @@ $downloadedOK | export-csv -Path  $localDetailsFile
 # dGlnbyBMaW1pdGVkMSQwIgYDVQQDExtTZWN0aWdvIFJTQSBDb2RlIFNpZ25pbmcg
 # Q0ECEQDoRjMtvtHZuBvgN9mOILycMAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEM
 # MQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQB
-# gjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQtgflyWTMZ6XD1
-# phLaUoupzbTiWDANBgkqhkiG9w0BAQEFAASCAQCb2M04PcnezJVNc7ran82qbblN
-# ZGzxTrxGKmH10J+1IzkccWf0Uvm8eQfxkEQ7W+ZFo80ExCncLxpxvRSJxIblxKGx
-# 9N7h4mgUT8GdF4iUDeyKmgMfRTwnoxzLlyZdz8Glkwez3Kcf1JFRH/Aix7+E6sbM
-# uGLzNOx4JTyNDkXOIANl4mf0FmfgC1pxXtPRVEaDC25tjjiR2FGLK3AICuOXcHZS
-# bNiaIreR4QFEJ6pWJH8T2L5ZVsfiReAXsx0ugBk3WvLM3Cli0rscRDv88Z0QxT8C
-# WfB2r6n4giXI6bBHz3YVUbUb1dUFBUu/VPe6Vao59Y29lNJUoPj94K9B2MHa
+# gjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRitw7yl5G+oYcR
+# MOQ6B8aOYPEZujANBgkqhkiG9w0BAQEFAASCAQBq558sDeyoX3+larYQKePEaFzs
+# klyxn9e2g/MR6+XihC82UDKPdYaj/OgFfBXI0a7YaL57agjvycshEq5szfpUwNcm
+# qmNmvlCEm5NtoDyca1CjuDF1Y4m3i1kLuRjAP3WkZuJAHuQLeFFLdf7/DVnBdiKn
+# SZJP4LSu1Ij/OtaTld4wTir0m8VrViJqbsqa7eFZW1VEPWytucTSyFw2VZi5tsNA
+# YmkfQB1xkCknou+inE3aPR14QPj6dxGaZo7UP71HZwpjUL194xPfYZuVoHY34CXj
+# PIRIp0RfeaYYYYSS/x7FI0rn+8uSP3HkQnGCAcUWvFgQKXbcI38ySPv7yZzq
 # SIG # End signature block
