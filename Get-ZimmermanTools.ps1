@@ -5,6 +5,8 @@
     A file will also be created in $Dest that tracks the SHA-1 of each file, so rerunning the script will only download new versions. To redownload, remove lines from or delete the CSV file created under $Dest and rerun.
 .PARAMETER Dest
     The path you want to save the programs to.
+.PARAMETER NetVersion
+    Which .net version to get. Default is both net 4.x and net 6.0 builds. Specify 4 or 6 to only get tools built against that version of .net
 .EXAMPLE
     C:\PS> Get-ZimmermanTools.ps1 -Dest c:\tools
     Downloads/extracts and saves details about programs to c:\tools directory.
@@ -18,6 +20,9 @@ Param
 (
     [Parameter()]
     [string]$Dest= (Resolve-Path "."), #Where to save programs to
+
+    [Parameter()]
+    [int]$NetVersion= (0), #Which version of .net build to get
     
     #Specifies a proxy server for the request, rather than connecting directly to the Internet resource. Enter the URI of a network proxy server.
     [Parameter(Mandatory=$true,
@@ -240,20 +245,69 @@ $progressPreference = 'Continue'
 $regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].(zip|txt)'
 $matchdetails = $regex.Match($PageContent)
 
+
+$uniqueUrlhash = @{}
+
+
 Write-Color -Text "* ", "Getting available programs..." -Color Green,$defaultColor
 $progressPreference = 'silentlyContinue'
 while ($matchdetails.Success) {
-    $headers = (Invoke-WebRequest @IWRProxyConfig -Uri $matchdetails.Value -UseBasicParsing -Method Head).Headers
 
     if ($matchdetails.Value.EndsWith('All.zip'))
     {
-	$matchdetails = $matchdetails.NextMatch()
+	    $matchdetails = $matchdetails.NextMatch()
     	continue
     }
+
+    
+
+    if ($uniqueUrlhash.Contains($matchdetails.Value))
+    {
+        $matchdetails = $matchdetails.NextMatch()
+        continue
+    }
+
+    #Write-Host $matchdetails.Value
+
+    $uniqueUrlhash.Add($matchdetails.Value, $matchdetails.Value)
+
+    $isnet6 = $false
+
+    if ($NetVersion -eq 4)
+    {
+        if (!$matchdetails.Value.EndsWith("Get-ZimmermanTools.zip") -and $matchdetails.Value.Contains('/net6/'))
+        {
+            $matchdetails = $matchdetails.NextMatch()
+            continue
+        }
+    }
+
+    if ($NetVersion -eq 6)
+    {
+        if (!$matchdetails.Value.EndsWith("Get-ZimmermanTools.zip") -and !$matchdetails.Value.Contains('/net6/'))
+        {
+            $matchdetails = $matchdetails.NextMatch()
+            continue
+        }
+    }
+
+    $isnet6 = $matchdetails.Value.Contains('/net6/')
+
+    $headers = (Invoke-WebRequest @IWRProxyConfig -Uri $matchdetails.Value -UseBasicParsing -Method Head).Headers
+       
+    #Check if net version is set and act accordingly
+    #https://f001.backblazeb2.com/file/EricZimmermanTools/AmcacheParser.zip
+    #https://f001.backblazeb2.com/file/EricZimmermanTools/net6/AmcacheParser_6.zip
 
     $getUrl = $matchdetails.Value
     $sha = $headers["x-bz-content-sha1"]
     $name = $headers["x-bz-file-name"]
+
+    if ($isnet6)
+    {
+        $name = Split-Path $name -leaf
+    }
+
     $size = $headers["Content-Length"]
 
     $details = @{            
@@ -261,6 +315,7 @@ while ($matchdetails.Success) {
         SHA1     = [string]$sha                 
         URL      = [string]$getUrl
         Size     = [string]$size
+        IsNet6   = [bool]$isnet6
         }                           
 
     $webKeyCollection += New-Object PSObject -Property $details  
@@ -305,15 +360,28 @@ foreach($td in $toDownload)
     $p = [math]::round( ($i/$toDownload.Count) *100, 2 )
 
     #Write-Host ($td | Format-Table | Out-String)
+
+    $tempDest = $Dest
     
     try 
     {
         $dUrl = $td.URL
         $size = $td.Size
         $name = $td.Name
+        $is6 = $td.IsNet6
 
-	Write-Progress -Activity "Updating programs...." -Status "$p% Complete" -PercentComplete $p -CurrentOperation "Downloading $name" 
-	$destFile = [IO.Path]::Combine($Dest, $name)
+        if ($is6)
+        {
+            $tempDest = Join-Path $tempDest "net6"
+            if(!(Test-Path -Path $tempDest ))
+            {
+                Write-Color -Text "* ", "$tempDest does not exist. Creating..." -Color Green,$defaultColor
+                New-Item -ItemType directory -Path $tempDest > $null               
+            }
+        }
+
+	    Write-Progress -Activity "Updating programs...." -Status "$p% Complete" -PercentComplete $p -CurrentOperation "Downloading $name" 
+	    $destFile = [IO.Path]::Combine($tempDest, $name)
 
         $progressPreference = 'silentlyContinue'
         Invoke-WebRequest @IWRProxyConfig -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
@@ -322,7 +390,8 @@ foreach($td in $toDownload)
 
 	if ( $name.endswith("zip") )  
 	{
-	    Expand-Archive -Path $destFile -DestinationPath $Dest -Force
+        
+	    Expand-Archive -Path $destFile -DestinationPath $tempDest -Force
 	}      
 
 	$downloadedOK += $td
@@ -365,82 +434,3 @@ foreach($webItems in $webKeyCollection)
 Write-Color -LinesBefore 1 -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green,$defaultColor -LinesAfter 1
 
 $downloadedOK | export-csv -Path  $localDetailsFile
-
-
-# SIG # Begin signature block
-# MIIOCQYJKoZIhvcNAQcCoIIN+jCCDfYCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
-# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUFBUkwATCRlUJfZhwYPYZkbh/
-# XZGgggtAMIIFQzCCBCugAwIBAgIRAOhGMy2+0dm4G+A32Y4gvJwwDQYJKoZIhvcN
-# AQELBQAwfDELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdyZWF0ZXIgTWFuY2hlc3Rl
-# cjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSQw
-# IgYDVQQDExtTZWN0aWdvIFJTQSBDb2RlIFNpZ25pbmcgQ0EwHhcNMTkxMjI1MDAw
-# MDAwWhcNMjMwMzI0MjM1OTU5WjCBkjELMAkGA1UEBhMCVVMxDjAMBgNVBBEMBTQ2
-# MDQwMQswCQYDVQQIDAJJTjEQMA4GA1UEBwwHRmlzaGVyczEcMBoGA1UECQwTMTU2
-# NzIgUHJvdmluY2lhbCBMbjEaMBgGA1UECgwRRXJpYyBSLiBaaW1tZXJtYW4xGjAY
-# BgNVBAMMEUVyaWMgUi4gWmltbWVybWFuMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
-# MIIBCgKCAQEAtU2gix6QVzDg+YBDDNyZj1kPFwPDhTbojEup24x3swWNCI14P4dM
-# Cs6SKDUPmKhe8k5aLpv9eacsgyndyYkrcSGFCwUwbTnetrn8lzOFu53Vz4sjFIMl
-# mKVSPfKE7GBoBcJ8jT3LKoB7YzZF6khoQY84fOJPNOj7snfExN64J6KVQlDsgOjL
-# wY720m8bN/Rn+Vp+FBXHyUIjHhhvb+o29xFmemxzfTWXhDM2oIX4kRuF/Zmfo9l8
-# n3J+iOBL/IiIVTi68adYxq3s0ASxgrQ4HO3veGgzNZ9KSB1ltXyNVGstInIs+UZP
-# lKynweRQJO5cc7zK64sSotjgwlcaQdBAHQIDAQABo4IBpzCCAaMwHwYDVR0jBBgw
-# FoAUDuE6qFM6MdWKvsG7rWcaA4WtNA4wHQYDVR0OBBYEFGsRm7mtwiWCh8MSEbEX
-# TwjtcryvMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMBMGA1UdJQQMMAoG
-# CCsGAQUFBwMDMBEGCWCGSAGG+EIBAQQEAwIEEDBABgNVHSAEOTA3MDUGDCsGAQQB
-# sjEBAgEDAjAlMCMGCCsGAQUFBwIBFhdodHRwczovL3NlY3RpZ28uY29tL0NQUzBD
-# BgNVHR8EPDA6MDigNqA0hjJodHRwOi8vY3JsLnNlY3RpZ28uY29tL1NlY3RpZ29S
-# U0FDb2RlU2lnbmluZ0NBLmNybDBzBggrBgEFBQcBAQRnMGUwPgYIKwYBBQUHMAKG
-# Mmh0dHA6Ly9jcnQuc2VjdGlnby5jb20vU2VjdGlnb1JTQUNvZGVTaWduaW5nQ0Eu
-# Y3J0MCMGCCsGAQUFBzABhhdodHRwOi8vb2NzcC5zZWN0aWdvLmNvbTAfBgNVHREE
-# GDAWgRRlcmljQG1pa2VzdGFtbWVyLmNvbTANBgkqhkiG9w0BAQsFAAOCAQEAhX//
-# xLBhfLf4X2OPavhp/AlmnpkQU8yIZv8DjVQKJ0j8YhxClIAgyuSb/6+q+njOsxMn
-# ZDoCAPlzG0P74e1nYTiw3beG6ePr3uDc9PjUBxDiHgxlI69mlXYdjiAircV5Z8iU
-# TcmqJ9LpnTcrvtmQAvN1ldoSW4hmHIJuV0XLOhvAlURuPM1/C9lh0K65nH3wYIoU
-# /0pELlDfIdUxL2vOLnElxCv0z07Hf9yw+3grWHJb54Vms6o/xYxZgqCu02DH0q1f
-# KrNBwtDkLKKObBF54wA7LdaDGbl3CJXQVRmgokcDI/izmZJxHAHebdbj4zVFyCND
-# sMRySmbR+m58q/jv3DCCBfUwggPdoAMCAQICEB2iSDBvmyYY0ILgln0z02owDQYJ
-# KoZIhvcNAQEMBQAwgYgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpOZXcgSmVyc2V5
-# MRQwEgYDVQQHEwtKZXJzZXkgQ2l0eTEeMBwGA1UEChMVVGhlIFVTRVJUUlVTVCBO
-# ZXR3b3JrMS4wLAYDVQQDEyVVU0VSVHJ1c3QgUlNBIENlcnRpZmljYXRpb24gQXV0
-# aG9yaXR5MB4XDTE4MTEwMjAwMDAwMFoXDTMwMTIzMTIzNTk1OVowfDELMAkGA1UE
-# BhMCR0IxGzAZBgNVBAgTEkdyZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2Fs
-# Zm9yZDEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMSQwIgYDVQQDExtTZWN0aWdv
-# IFJTQSBDb2RlIFNpZ25pbmcgQ0EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
-# AoIBAQCGIo0yhXoYn0nwli9jCB4t3HyfFM/jJrYlZilAhlRGdDFixRDtsocnppnL
-# lTDAVvWkdcapDlBipVGREGrgS2Ku/fD4GKyn/+4uMyD6DBmJqGx7rQDDYaHcaWVt
-# H24nlteXUYam9CflfGqLlR5bYNV+1xaSnAAvaPeX7Wpyvjg7Y96Pv25MQV0SIAhZ
-# 6DnNj9LWzwa0VwW2TqE+V2sfmLzEYtYbC43HZhtKn52BxHJAteJf7wtF/6POF6Yt
-# VbC3sLxUap28jVZTxvC6eVBJLPcDuf4vZTXyIuosB69G2flGHNyMfHEo8/6nxhTd
-# VZFuihEN3wYklX0Pp6F8OtqGNWHTAgMBAAGjggFkMIIBYDAfBgNVHSMEGDAWgBRT
-# eb9aqitKz1SA4dibwJ3ysgNmyzAdBgNVHQ4EFgQUDuE6qFM6MdWKvsG7rWcaA4Wt
-# NA4wDgYDVR0PAQH/BAQDAgGGMBIGA1UdEwEB/wQIMAYBAf8CAQAwHQYDVR0lBBYw
-# FAYIKwYBBQUHAwMGCCsGAQUFBwMIMBEGA1UdIAQKMAgwBgYEVR0gADBQBgNVHR8E
-# STBHMEWgQ6BBhj9odHRwOi8vY3JsLnVzZXJ0cnVzdC5jb20vVVNFUlRydXN0UlNB
-# Q2VydGlmaWNhdGlvbkF1dGhvcml0eS5jcmwwdgYIKwYBBQUHAQEEajBoMD8GCCsG
-# AQUFBzAChjNodHRwOi8vY3J0LnVzZXJ0cnVzdC5jb20vVVNFUlRydXN0UlNBQWRk
-# VHJ1c3RDQS5jcnQwJQYIKwYBBQUHMAGGGWh0dHA6Ly9vY3NwLnVzZXJ0cnVzdC5j
-# b20wDQYJKoZIhvcNAQEMBQADggIBAE1jUO1HNEphpNveaiqMm/EAAB4dYns61zLC
-# 9rPgY7P7YQCImhttEAcET7646ol4IusPRuzzRl5ARokS9At3WpwqQTr81vTr5/cV
-# lTPDoYMot94v5JT3hTODLUpASL+awk9KsY8k9LOBN9O3ZLCmI2pZaFJCX/8E6+F0
-# ZXkI9amT3mtxQJmWunjxucjiwwgWsatjWsgVgG10Xkp1fqW4w2y1z99KeYdcx0BN
-# YzX2MNPPtQoOCwR/oEuuu6Ol0IQAkz5TXTSlADVpbL6fICUQDRn7UJBhvjmPeo5N
-# 9p8OHv4HURJmgyYZSJXOSsnBf/M6BZv5b9+If8AjntIeQ3pFMcGcTanwWbJZGehq
-# jSkEAnd8S0vNcL46slVaeD68u28DECV3FTSK+TbMQ5Lkuk/xYpMoJVcp+1EZx6El
-# QGqEV8aynbG8HArafGd+fS7pKEwYfsR7MUFxmksp7As9V1DSyt39ngVR5UR43QHe
-# sXWYDVQk/fBO4+L4g71yuss9Ou7wXheSaG3IYfmm8SoKC6W59J7umDIFhZ7r+YMp
-# 08Ysfb06dy6LN0KgaoLtO0qqlBCk4Q34F8W2WnkzGJLjtXX4oemOCiUe5B7xn1qH
-# I/+fpFGe+zmAEc3btcSnqIBv5VPU4OOiwtJbGvoyJi1qV3AcPKRYLqPzW0sH3DJZ
-# 84enGm1YMYICMzCCAi8CAQEwgZEwfDELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
-# ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
-# dGlnbyBMaW1pdGVkMSQwIgYDVQQDExtTZWN0aWdvIFJTQSBDb2RlIFNpZ25pbmcg
-# Q0ECEQDoRjMtvtHZuBvgN9mOILycMAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3AgEM
-# MQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQB
-# gjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTeLfuqxDPOi4kx
-# W2InprBZTbKlwDANBgkqhkiG9w0BAQEFAASCAQB4zoZdjc5U0d9ALDj6mFGGF0Ra
-# qpKvQQVdOBQEkJImtGO9hwVp0XB1w5iU380dPPeFfOhIpS6AJPzuMV1sXVQKLIQW
-# bOggPFGJAZc3O4WDFcCTUFxuxLl9kxRJrmv0fGyalUG8pUsJQs3dKhXW7Hyhym10
-# 7gTa+CX7J0xbMD7bqOJfAuqnYqAsHYOW7nHF1Wfc3nwm8H+XeyTHbhzCjLsO0Xpl
-# 3EmRi27mSN3oqTrS9e897xgvP+WJKNkfgsoopx/IlrLOxb5EfHDQd0U1h4TBCNZD
-# aJDbIkmmWyYuZsDi5dp6FIaDIKC130s6RSFTlzeEO75PMOcFAwoe4+oO33O4
-# SIG # End signature block
