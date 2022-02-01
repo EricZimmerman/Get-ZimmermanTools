@@ -12,7 +12,7 @@
     Downloads/extracts and saves details about programs to c:\tools directory.
 .NOTES
     Author: Eric Zimmerman
-    Date:   January 22, 2021    
+    Date:   January 22, 2022    
 #>
 
 [CmdletBinding(DefaultParameterSetName = "NoProxy")]
