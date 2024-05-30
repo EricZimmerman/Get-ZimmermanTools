@@ -433,7 +433,7 @@ foreach ($td in $toDownload)
 		if ($name.endswith("zip"))
 		{
 			
-			Expand-Archive -Path $destFile -DestinationPath $tempDest -Force
+			Microsoft.PowerShell.Archive\Expand-Archive -Path $destFile -DestinationPath $tempDest -Force
 		}
 		
 		$downloadedOK += $td
