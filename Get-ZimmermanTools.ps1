@@ -230,7 +230,7 @@ Write-Color -LinesBefore 1 -Text "To redownload, remove lines from or delete the
 Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4 or 6). Default is 6. Use 0 to get both" -LinesAfter 1 -BackgroundColor Green
 
 $TestColor = (Get-Host).ui.rawui.ForegroundColor
-if ($TestColor -eq -1)
+if ($TestColor -eq -1 -or $null -eq $TestColor)
 {
 	$defaultColor = [ConsoleColor]::Gray
 }
