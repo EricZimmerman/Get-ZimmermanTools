@@ -6,7 +6,7 @@
 .PARAMETER Dest
     The path you want to save the programs to.
 .PARAMETER NetVersion
-    Which .net version to get. Default is ONLY net 6.0 builds as of 2023-05-18. Specify 4 or 6 to only get tools built against that version of .net, or 0 for both
+    Which .net version to get. Default is ONLY net 6 builds as of 2023-05-18. Specify 4, 6, or 9 to only get tools built against that version of .net, or 0 for all.
 .EXAMPLE
     C:\PS> Get-ZimmermanTools.ps1 -Dest c:\tools
     Downloads/extracts and saves details about programs to c:\tools directory.
@@ -227,7 +227,7 @@ Write-Color "A file will also be created in $Dest that tracks the signature of e
 Write-Color "so rerunning the script will only download new versions."
 Write-Color -LinesBefore 1 -Text "To redownload, remove lines from or delete the CSV file created under $Dest and rerun. Enjoy!"
 
-Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4 or 6). Default is 6. Use 0 to get both" -LinesAfter 1 -BackgroundColor Green
+Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4, 6, or 9). Default is 6. Use 0 to get all" -LinesAfter 1 -BackgroundColor Green
 
 $TestColor = (Get-Host).ui.rawui.ForegroundColor
 if ($TestColor -eq -1 -or $null -eq $TestColor)
@@ -280,7 +280,6 @@ $progressPreference = 'silentlyContinue'
 while ($matchdetails.Success)
 {
 	$newUrl = $matchdetails.Value.Replace('https://f001.backblazeb2.com/file/EricZimmermanTools/', 'https://download.ericzimmermanstools.com/')
-
 	
 	if ($newUrl.EndsWith('All.zip'))
 	{
@@ -293,7 +292,12 @@ while ($matchdetails.Success)
 		$matchdetails = $matchdetails.NextMatch()
 		continue
 	}
-	
+
+	if ($newUrl.EndsWith('All_9.zip'))
+	{
+		$matchdetails = $matchdetails.NextMatch()
+		continue
+	}
 	
 	if ($uniqueUrlhash.Contains($newUrl))
 	{
@@ -306,10 +310,11 @@ while ($matchdetails.Success)
 	$uniqueUrlhash.Add($newUrl, $newUrl)
 	
 	$isnet6 = $false
+	$isnet9 = $false
 	
 	if ($NetVersion -eq 4)
 	{
-		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and $newUrl.Contains('/net6/'))
+		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and ( $newUrl.Contains('/net6/') -or $newUrl.Contains('/net9/') ))
 		{
 			$matchdetails = $matchdetails.NextMatch()
 			continue
@@ -324,8 +329,18 @@ while ($matchdetails.Success)
 			continue
 		}
 	}
+
+	if ($NetVersion -eq 9)
+	{
+		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and !$newUrl.Contains('/net9/'))
+		{
+			$matchdetails = $matchdetails.NextMatch()
+			continue
+		}
+	}
 	
 	$isnet6 = $newUrl.Contains('/net6/')
+	$isnet9 = $newUrl.Contains('/net9/')
 	
 	#Write-Host $newUrl
 	
@@ -337,18 +352,17 @@ while ($matchdetails.Success)
 	#https://f001.backblazeb2.com/file/EricZimmermanTools/AmcacheParser.zip
 	#https://f001.backblazeb2.com/file/EricZimmermanTools/net6/AmcacheParser_6.zip
 	
-	#$newUrl = $matchdetails.Value.Replace('https://f001.backblazeb2.com/file/EricZimmermanTools', 'https://download.ericzimmermanstools.com/')
+	$newUrl = $matchdetails.Value.Replace('https://f001.backblazeb2.com/file/EricZimmermanTools', 'https://download.ericzimmermanstools.com/')
 
-	#Write-Host 'THIS IS ' + $newUrl
+	#Write-Host 'THIS IS' + $newUrl
 
 	$getUrl = $newUrl
 	#$sha = $headers["x-bz-content-sha1"]
 	$sha = $headers["ETag"]
 	#$name = $headers["x-bz-file-name"]
 	$name = ([uri]$getUrl).Segments[-1]
-
 	
-	if ($isnet6)
+	if ($isnet6 -or $isnet9)
 	{
 		$name = Split-Path $name -leaf
 	}
@@ -361,6 +375,7 @@ while ($matchdetails.Success)
 		URL  = [string]$getUrl
 		Size = [string]$size
 		IsNet6 = [bool]$isnet6
+		IsNet9 = [bool]$isnet9
 	}
 	
 	$webKeyCollection += New-Object PSObject -Property $details
@@ -392,6 +407,8 @@ if ($toDownload.Count -eq 0)
 	return
 }
 
+
+
 $downloadedOK = @()
 
 $destFile = ""
@@ -414,10 +431,21 @@ foreach ($td in $toDownload)
 		$size = $td.Size -as [long]
 		$name = $td.Name
 		$is6 = $td.IsNet6
+		$is9 = $td.IsNet9
 		
 		if ($is6)
 		{
 			$tempDest = Join-Path $tempDest "net6"
+			if (!(Test-Path -Path $tempDest))
+			{
+				Write-Color -Text "* ", "$tempDest does not exist. Creating..." -Color Green, $defaultColor
+				New-Item -ItemType directory -Path $tempDest > $null
+			}
+		}
+
+		if ($is9)
+		{
+			$tempDest = Join-Path $tempDest "net9"
 			if (!(Test-Path -Path $tempDest))
 			{
 				Write-Color -Text "* ", "$tempDest does not exist. Creating..." -Color Green, $defaultColor
@@ -435,6 +463,10 @@ foreach ($td in $toDownload)
 		if ($is6)
 		{
 			$extraInfo = " (net 6)"
+		}
+		if ($is9)
+		{
+			$extraInfo = " (net 9)"
 		}
 		
 		$sizeNice = '{0:N0}' -f $size
@@ -483,7 +515,6 @@ foreach ($webItems in $webKeyCollection)
 	}
 }
 
-
 Write-Color -LinesBefore 1 -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green, $defaultColor -LinesAfter 1
 
 $downloadedOK | export-csv -Path $localDetailsFile
@@ -491,8 +522,8 @@ $downloadedOK | export-csv -Path $localDetailsFile
 # SIG # Begin signature block
 # MIIVuwYJKoZIhvcNAQcCoIIVrDCCFagCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDQlASDTi2a2UGA
-# Q7YxZIeNWORYLqUa3TCURRzuuh3NRqCCEfYwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBpC4ySWrWhiyOq
+# ofl5uR+fJx6lUx8qaKlwibWFPh09jqCCEfYwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -593,16 +624,16 @@ $downloadedOK | export-csv -Path $localDetailsFile
 # Q29kZSBTaWduaW5nIENBIFIzNgIRAIwb4pbNs8IyKjkSeG1UxGEwDQYJYIZIAWUD
 # BAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMx
 # DAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkq
-# hkiG9w0BCQQxIgQgcAMI6EDR2kPE35nQ9xdPDzupOSEvrEuZEX5tVGWabugwDQYJ
-# KoZIhvcNAQEBBQAEggIACR5qRmZUoUjmiFrU4w3hQQP1Qo7dAqZVGGCkeuizjBDo
-# nUGsCeJDTS1+XCK/sqP6rGo3p+QflQMD4G+RxNn9Auc17rU1VKDYtK/Zq6keHoqS
-# s4C+qU4VNpIyyOw97/9uwKp5WoBxjM/bUg3mcyHK4WNSPOXw+pC3sezU465rUdqY
-# oL12qA7GXnUf/06jafrU21xTHCTYm00XATZwzbqQ7IHNftNmPienQo0m9SqORnK5
-# 3RzQWNwFvtHAG1GzQtUeGzCcphGYPTAhTu2I+gEPGN9427kRmulNA4O5NtBiZVzk
-# cc9egm0133FITOI48H5f2+XDrgmnCDOLMXjivXNM0hSwQI73FkVB3I59savtZDpf
-# H6Ej7oALxtL7G24natqEzT+AQ6l5rfiz+0uvbmwBbF5G3s1B6FJ3GH4SyQPuBiZD
-# U8s26ouNiYGMoOVB0ASAmB866H4UOXI0b+5P99S3FTm+/JG/4Du7Q5LZC8xd0QNk
-# OoyCwn4fMjypYaYSHm80mC37wolEfx8vPime4GM7az7PD4yPvfzcnlooKRWvmY1J
-# YuYsa+NrPdhPGqhynFSXqS5uYJSWZ+6PXhC1RrLJ4GusENo1cmx4F6sESTVny454
-# 8/J4xBJ0UiTMTxRptoNXmSd47ttSUHM1ysthJdmkHGa2YWPZwt+zJYcXElmUwBk=
+# hkiG9w0BCQQxIgQgAuqpNxuXFm7Iu7Eh7dwyRK1b0LFB64tC0UHua0t56YAwDQYJ
+# KoZIhvcNAQEBBQAEggIAANE5TxtQvAMI6KP71R9GEDGwrtEfRPH0ErnVWPlY5Vm6
+# +Cgmxu5f0z3XO1nr6gJDTuWKxwJQQ0rYsifQfx0m1EGMVue8aIBGP1Z84M2p+ryI
+# kmf/mJB/DdYUNAKkgVSdU0gRFNyFU4b/nEOv5bUOUjJBaBdJL1EjY0yG2Aci45ra
+# trlJmhknTIkvJ0MKdM8KaavVUn9il5E6XgPbGNM9amV1zI6uNAGWl9KN1xMe+VKQ
+# 9ehnkJkP6RZnrY9kEfXXrDdoywjghdwzinAfbZOT8BZbT79bEhkWVUsdqcYL0oOe
+# h5LIjDzwzUFHVLv5IBmXO1ANWd53H0JQ+NthN/5PkFygqLsilgCRDMSWgu8BceRk
+# LIAA+trr6/EXFZJKZsb6a12hQcE8EaaROUwxAkgIRr2fzajAcrR/1d/sALCySnI5
+# N8eXzyyoH1HiJnrCIV6j6cDRLzmTK4+XYPY4Ts16WSTk2xwi9WvARTvD3MFx5DFu
+# YtL+gwAQS3tVWM4/n8W5zOjinTQXV4ifyozNudLhzUC/ln/aWM3LsxOu67nGMU0j
+# ZtwfuYI3v7tvQ+INILlSCpSD7jdzo4LRTL2jGtMzEU82j9RVgd7JuMRsvMtpLvIW
+# N9umfVOEgKTBhnMd8+drnF+9lzBioBmTJAncgMg0zI/UN9o/PnjYjrwXQutZHcs=
 # SIG # End signature block
