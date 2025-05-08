@@ -22,6 +22,7 @@ Param
 	[string]$Dest = (Resolve-Path "."),
 	#Where to save programs to
 	[Parameter()]
+	[ValidateSet('0', '4', '6', '9')]
 	[int]$NetVersion = (9),
 	#Which version of .net build to get
 	#Specifies a proxy server for the request, rather than connecting directly to the Internet resource. Enter the URI of a network proxy server.
@@ -373,9 +374,22 @@ while ($matchdetails.Success)
 	
 	#Write-Host $newUrl
 	
-	$headers = (Invoke-WebRequest @IWRProxyConfig -Uri $newUrl -UseBasicParsing -Method Head).Headers
+	$headers = $null
+	try {
+		$response = Invoke-WebRequest @IWRProxyConfig -Uri $newUrl -UseBasicParsing -Method Head -ErrorAction Stop
+		$headers = $response.Headers
+	} catch {
+		if ($_.Exception.Response -ne $null) {
+			$statusCode = $_.Exception.Response.StatusCode.value__
+			Write-Color -Text "* ", "HTTP error $statusCode for URL: $newUrl" -Color Yellow, Red
+			continue
+		} else {
+			Write-Color -Text "* ", "Network or connection error for URL: $newUrl. Error: $_" -Color Yellow, Red
+			continue
+		}
+	}	
 
-	#Write-Host $headers
+ 	#Write-Host $headers
 	
 	#Check if net version is set and act accordingly
 	#https://f001.backblazeb2.com/file/EricZimmermanTools/AmcacheParser.zip
@@ -518,9 +532,9 @@ foreach ($td in $toDownload)
 	finally
 	{
 		$progressPreference = 'Continue'
-		if ($name.endswith("zip"))
+		if ($name.endswith("zip") -and (Test-Path -Path $destFile))
 		{
-			remove-item -Path $destFile
+			remove-item -Path $destFile -Force
 		}
 		
 	}
