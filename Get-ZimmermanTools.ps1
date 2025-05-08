@@ -22,6 +22,7 @@ Param
 	[string]$Dest = (Resolve-Path "."),
 	#Where to save programs to
 	[Parameter()]
+	[ValidateSet('0', '4', '6', '9')]
 	[int]$NetVersion = (6),
 	#Which version of .net build to get
 	#Specifies a proxy server for the request, rather than connecting directly to the Internet resource. Enter the URI of a network proxy server.
