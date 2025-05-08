@@ -1,4 +1,5 @@
-﻿$acert =(dir Cert:\CurrentUser\My -CodeSigningCert)[1]
+﻿import code signing cert, use defaults
+
+$acert = Get-ChildItem –Path Cert:\CurrentUser\My -CodeSigningCert
 Set-AuthenticodeSignature .\Get-ZimmermanTools.ps1 -Certificate $acert
 
-you may have to adjust the [1] to point to the right cert
