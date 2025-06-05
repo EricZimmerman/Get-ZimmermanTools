@@ -6,7 +6,7 @@
 .PARAMETER Dest
     The path you want to save the programs to.
 .PARAMETER NetVersion
-    Which .net version to get. Default is ONLY net 6 builds as of 2023-05-18. Specify 4, 6, or 9 to only get tools built against that version of .net, or 0 for all.
+    Which .net version to get. Default is ONLY net 9 builds as of 2025-05-18. Specify 4, 6, or 9 to only get tools built against that version of .net, or 0 for all.
 .EXAMPLE
     C:\PS> Get-ZimmermanTools.ps1 -Dest c:\tools
     Downloads/extracts and saves details about programs to c:\tools directory.
@@ -257,7 +257,7 @@ Write-Color "A file will also be created in $Dest that tracks the signature of e
 Write-Color "so rerunning the script will only download new versions."
 Write-Color -LinesBefore 1 -Text "To redownload, remove lines from or delete the CSV file created under $Dest and rerun. Enjoy!"
 
-Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4, 6, or 9). Default is 6. Use 0 to get all" -LinesAfter 1 -BackgroundColor Green
+Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4, 6, or 9). Default is 9. Use 0 to get all" -LinesAfter 1 -BackgroundColor Green
 
 $TestColor = (Get-Host).ui.rawui.ForegroundColor
 if ($TestColor -eq -1 -or $null -eq $TestColor)
@@ -565,8 +565,8 @@ $downloadedOK | export-csv -Path $localDetailsFile
 # SIG # Begin signature block
 # MIIVuwYJKoZIhvcNAQcCoIIVrDCCFagCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAPquBhFaoGt08g
-# L4Ox4aFzUQHsyVzvPI0QoA964aaWraCCEfYwggVvMIIEV6ADAgECAhBI/JO0YFWU
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAAEFnLhv9WOYvR
+# 8RoJK8ngEst6fz9Dp/KwfJ4LWQvgWqCCEfYwggVvMIIEV6ADAgECAhBI/JO0YFWU
 # jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
 # DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
 # EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
@@ -667,16 +667,16 @@ $downloadedOK | export-csv -Path $localDetailsFile
 # Q29kZSBTaWduaW5nIENBIFIzNgIRAIwb4pbNs8IyKjkSeG1UxGEwDQYJYIZIAWUD
 # BAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMx
 # DAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkq
-# hkiG9w0BCQQxIgQgt3DdHmzdkapKeKHxykAwiLR4Qu3n6FgaX6zk+8sjwgUwDQYJ
-# KoZIhvcNAQEBBQAEggIAwfpEksOOwo4MXxpHhoY0a7MmQTxHgMpkd4xkAoTzU0yg
-# wCGHaMMauTgsm8CkRXhFrzFi0iJFoUFbxaE2Os3C2ts6TpGEf7vlzmf5fR+tK2Vt
-# QfejuGCXBdIwwFLwBCJ968YOIMZK/lM1DeDygfUnor8j57wUafqaFGtrYYs07xdB
-# eAdSYntZ62PbPQaSbn1dwiVqg10cGqejko3hctHWSHi219e5zRXVloYAQu6Nwj5W
-# qQuAjUGcwAIIgzXQJsLF+opcyIzpQ8Y10NLtla9wwfIe482WRfjIJLrTPlkTsf3j
-# mNrPGgZB6f5720sxaw4pfLDOHbCGVd/xdUK9GNjnrVtN7n85PEH1aZXDEL/9qN5H
-# oW9xQaQCIzU31qf2oQVz5X7u8khZkaGTCtIKsT/agpIyjTi+ptL3dw7O7fd0PYoA
-# qA9GLvefsglBxVno7lY81aLWkLdaUqs7RQN1Mb0qvFipYtqavWvck5rwYyBQYDbH
-# 0NygEU3JVDm5khdt4Wr067LM3LL6LSftfaK0GUDRQoDhzDwNYAVBIpro6miV928R
-# wXr/vwQj4339GkjG4m0X8YN5VOfSMXwpwCdOmR7SN4SunHYPItsrIu6lSjgRF5wR
-# dIigtZxlMMt9jkYUuY1DitV9FJCUS5m6t1VpTD+OEb1OUdOyh4YczXT5UFFfb7s=
+# hkiG9w0BCQQxIgQgSr8l19XI4OBgc0kH+1P4IAmn7GdJjxlHkGbRwq7R5+YwDQYJ
+# KoZIhvcNAQEBBQAEggIAlmkBlZ4okY+L00Y5oW9w6g8F86XUPHNUVf1aLz63X4Cd
+# b1kCDYk4tazUqyoHAaLcuPj4Xk6/4a1T4iXjHjJGT+LoMx+PoFzR7C+iSp4ulcoA
+# gyrDx6H33RzGn6UF17No0i9LX4yZvljrTdDEp4UCZDC/7n2BmmIb/M4a1HeU5ekG
+# n0Ap2GYT+OE3c8VL/Ag4Y8Vn1UJvuqmSAGdUsxpiybYugGDN08Hq4njwcV5ulQ6g
+# yx0V57SfkT0wItWDpvVDt5BFKCB8kGetp7cqsz00NIthf+CWE8NEol2hxEoEtAju
+# fZBPCYPctjugXIUiIHvDdo+cPQ/xo29zd2v7E/jEmb1pk0kTolC8CvACO1c0O4EW
+# e8rOV0a+5Lx51V0ZFX5SOKkX9P2tzxjyeviCdn2HfqjiB0d+U6D8Izact+p2qQuY
+# IAqkmuT76V8UdPS3dW5CDqfSfRmDtgvE9qYnsXdu+O9uPAiRZbr4ly7Wr16In2px
+# /1p20d4R/IdjXUpdIfYEM6iSR2eu57FcfJIHSK7eAN8Kv0QQ+XTWfqne5Azh0wyH
+# uNCWyRNmahdAsJ1yLywgTL0Hbb8Z9XzJe/vb0Nxg3obrr64ZUAfQbxD6H8m3G7w2
+# RpChU+vtGgQWPWM9T8wVFA/QdoZX08lPSDiEXSwGVhxtS84YmgVcGHhavIwBpmk=
 # SIG # End signature block
