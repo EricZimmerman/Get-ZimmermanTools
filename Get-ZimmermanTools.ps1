@@ -1,18 +1,4 @@
 <#
-.SYNOPSIS
-    This script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest. By default, ONLY .net 6 builds are downloaded.
-.DESCRIPTION
-    A file will also be created in $Dest that tracks the signature of each file, so rerunning the script will only download new versions. To redownload, remove lines from or delete the CSV file created under $Dest and rerun.
-.PARAMETER Dest
-    The path you want to save the programs to.
-.PARAMETER NetVersion
-    Which .net version to get. Default is ONLY net 9 builds as of 2025-05-18. Specify 4, 6, or 9 to only get tools built against that version of .net, or 0 for all.
-.EXAMPLE
-    C:\PS> Get-ZimmermanTools.ps1 -Dest c:\tools
-    Downloads/extracts and saves details about programs to c:\tools directory.
-.NOTES
-    Author: Eric Zimmerman
-    Date:   January 22, 2022    
 	.SYNOPSIS
 		This script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest. By default, ONLY .net 9 builds are downloaded.
 	
@@ -46,9 +32,6 @@
 		Author: Eric Zimmerman
 		Date:   January 22, 2022
 #>
-
-[CmdletBinding(DefaultParameterSetName = "NoProxy")]
-Param
 [CmdletBinding(DefaultParameterSetName = 'NoProxy')]
 param
 (
@@ -73,11 +56,9 @@ param
 			   Mandatory = $true)]
 	[Alias('pdc')]
 	[switch]$ProxyUseDefaultCredentials
-	
 )
 
 
-function Write-Color {
 function Write-Color
 {
     <#
