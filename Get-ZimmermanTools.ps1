@@ -24,6 +24,9 @@
 		This parameter is valid only when the Proxy parameter is also used in the command. You cannot use the ProxyCredential and ProxyUseDefaultCredentials parameters in the same command.
 		Indicates that the cmdlet uses the credentials of the current user to access the proxy server that is specified by the Proxy parameter.
 	
+	.PARAMETER Sync
+		A switch to tell Get-ZimmermanTools to run the --sync command for each of EvtxECmd, SQLECmd, and RECmd
+	
 	.EXAMPLE
 		C:\PS> Get-ZimmermanTools.ps1 -Dest c:\tools
 		Downloads/extracts and saves details about programs to c:\tools directory.
@@ -55,7 +58,9 @@ param
 	[Parameter(ParameterSetName = 'ProxyDefaultCreds',
 			   Mandatory = $true)]
 	[Alias('pdc')]
-	[switch]$ProxyUseDefaultCredentials
+	[switch]$ProxyUseDefaultCredentials,
+	[Alias('s')]
+	[switch]$Sync
 )
 
 
@@ -614,6 +619,28 @@ foreach ($webItems in $webKeyCollection)
 Write-Color -LinesBefore 1 -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green, $defaultColor -LinesAfter 1
 
 $downloadedOK | export-csv -Path $localDetailsFile
+
+#We need to sync the Maps for EvtxECmd and SQLECmd, and the batch files for RECmd
+#Reference: https://www.youtube.com/watch?v=mIb1GQP3ciE
+
+if ($Sync)
+{
+	Write-Color -Text "* ", "Sync switch detected! Syncing all ancillary files for EvtxECmd, SQLECmd, and RECmd..." -Color Green, $defaultColor
+	Write-Color -Text "* ", "Looking for any and all instances of EvtxECmd, RECmd, and SQLECmd in $Dest..." -Color Green, $defaultColor
+	Get-ChildItem -Path $Dest -Filter "*ecmd.exe" -Recurse | Where-Object { $_.Name -in "evtxecmd.exe", "sqlecmd.exe", "recmd.exe" } | ForEach-Object {
+		Write-Host "Running: $($_.FullName)"
+		try
+		{
+			
+			Write-Color -Text "* ", "Syncing $($_.FullName)..." -Color Green, $defaultColor
+			& $_.FullName --sync
+		}
+		catch
+		{
+			Write-Color -Text "* ", "Error syncing $($_.FullName)" -Color Red, $defaultColor
+		}
+	}
+}
 
 # SIG # Begin signature block
 # MIIVuwYJKoZIhvcNAQcCoIIVrDCCFagCAQExDzANBglghkgBZQMEAgEFADB5Bgor
