@@ -78,6 +78,8 @@ param
 
 
 function Write-Color {
+function Write-Color
+{
     <#
     .SYNOPSIS
     Write-Color is a wrapper around Write-Host delivering a lot of additional features for easier color options.
@@ -185,82 +187,117 @@ function Write-Color {
     Original idea: Josh (https://stackoverflow.com/users/81769/josh)
 
     #>
-    [alias('Write-Colour')]
-    [CmdletBinding()]
-    param (
-        [alias ('T')] [String[]]$Text,
-        [alias ('C', 'ForegroundColor', 'FGC')] [ConsoleColor[]]$Color = [ConsoleColor]::White,
-        [alias ('B', 'BGC')] [ConsoleColor[]]$BackGroundColor = $null,
-        [alias ('Indent')][int] $StartTab = 0,
-        [int] $LinesBefore = 0,
-        [int] $LinesAfter = 0,
-        [int] $StartSpaces = 0,
-        [alias ('L')] [string] $LogFile = '',
-        [Alias('DateFormat', 'TimeFormat')][string] $DateTimeFormat = 'yyyy-MM-dd HH:mm:ss',
-        [alias ('LogTimeStamp')][bool] $LogTime = $true,
-        [int] $LogRetry = 2,
-        [ValidateSet('unknown', 'string', 'unicode', 'bigendianunicode', 'utf8', 'utf7', 'utf32', 'ascii', 'default', 'oem')][string]$Encoding = 'Unicode',
-        [switch] $ShowTime,
-        [switch] $NoNewLine,
-        [alias('HideConsole')][switch] $NoConsoleOutput
-    )
-    if (-not $NoConsoleOutput) {
-        $DefaultColor = $Color[0]
-        if ($null -ne $BackGroundColor -and $BackGroundColor.Count -ne $Color.Count) {
-            Write-Error "Colors, BackGroundColors parameters count doesn't match. Terminated."
-            return
-        }
-        if ($LinesBefore -ne 0) { for ($i = 0; $i -lt $LinesBefore; $i++) { Write-Host -Object "`n" -NoNewline } } # Add empty line before
-        if ($StartTab -ne 0) { for ($i = 0; $i -lt $StartTab; $i++) { Write-Host -Object "`t" -NoNewline } }  # Add TABS before text
-        if ($StartSpaces -ne 0) { for ($i = 0; $i -lt $StartSpaces; $i++) { Write-Host -Object ' ' -NoNewline } }  # Add SPACES before text
-        if ($ShowTime) { Write-Host -Object "[$([datetime]::Now.ToString($DateTimeFormat))] " -NoNewline } # Add Time before output
-        if ($Text.Count -ne 0) {
-            if ($Color.Count -ge $Text.Count) {
-                # the real deal coloring
-                if ($null -eq $BackGroundColor) {
-                    for ($i = 0; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -NoNewline }
-                } else {
-                    for ($i = 0; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -BackgroundColor $BackGroundColor[$i] -NoNewline }
-                }
-            } else {
-                if ($null -eq $BackGroundColor) {
-                    for ($i = 0; $i -lt $Color.Length ; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -NoNewline }
-                    for ($i = $Color.Length; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $DefaultColor -NoNewline }
-                } else {
-                    for ($i = 0; $i -lt $Color.Length ; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -BackgroundColor $BackGroundColor[$i] -NoNewline }
-                    for ($i = $Color.Length; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $DefaultColor -BackgroundColor $BackGroundColor[0] -NoNewline }
-                }
-            }
-        }
-        if ($NoNewLine -eq $true) { Write-Host -NoNewline } else { Write-Host } # Support for no new line
-        if ($LinesAfter -ne 0) { for ($i = 0; $i -lt $LinesAfter; $i++) { Write-Host -Object "`n" -NoNewline } }  # Add empty line after
-    }
-    if ($Text.Count -and $LogFile) {
-        # Save to file
-        $TextToFile = ""
-        for ($i = 0; $i -lt $Text.Length; $i++) {
-            $TextToFile += $Text[$i]
-        }
-        $Saved = $false
-        $Retry = 0
-        Do {
-            $Retry++
-            try {
-                if ($LogTime) {
-                    "[$([datetime]::Now.ToString($DateTimeFormat))] $TextToFile" | Out-File -FilePath $LogFile -Encoding $Encoding -Append -ErrorAction Stop -WhatIf:$false
-                } else {
-                    "$TextToFile" | Out-File -FilePath $LogFile -Encoding $Encoding -Append -ErrorAction Stop -WhatIf:$false
-                }
-                $Saved = $true
-            } catch {
-                if ($Saved -eq $false -and $Retry -eq $LogRetry) {
-                    Write-Warning "Write-Color - Couldn't write to log file $($_.Exception.Message). Tried ($Retry/$LogRetry))"
-                } else {
-                    Write-Warning "Write-Color - Couldn't write to log file $($_.Exception.Message). Retrying... ($Retry/$LogRetry)"
-                }
-            }
-        } Until ($Saved -eq $true -or $Retry -ge $LogRetry)
-    }
+	[alias('Write-Colour')]
+	[CmdletBinding()]
+	param (
+		[alias ('T')]
+		[String[]]$Text,
+		[alias ('C', 'ForegroundColor', 'FGC')]
+		[ConsoleColor[]]$Color = [ConsoleColor]::White,
+		[alias ('B', 'BGC')]
+		[ConsoleColor[]]$BackGroundColor = $null,
+		[alias ('Indent')]
+		[int]$StartTab = 0,
+		[int]$LinesBefore = 0,
+		[int]$LinesAfter = 0,
+		[int]$StartSpaces = 0,
+		[alias ('L')]
+		[string]$LogFile = '',
+		[Alias('DateFormat', 'TimeFormat')]
+		[string]$DateTimeFormat = 'yyyy-MM-dd HH:mm:ss',
+		[alias ('LogTimeStamp')]
+		[bool]$LogTime = $true,
+		[int]$LogRetry = 2,
+		[ValidateSet('unknown', 'string', 'unicode', 'bigendianunicode', 'utf8', 'utf7', 'utf32', 'ascii', 'default', 'oem')]
+		[string]$Encoding = 'Unicode',
+		[switch]$ShowTime,
+		[switch]$NoNewLine,
+		[alias('HideConsole')]
+		[switch]$NoConsoleOutput
+	)
+	if (-not $NoConsoleOutput)
+	{
+		$DefaultColor = $Color[0]
+		if ($null -ne $BackGroundColor -and $BackGroundColor.Count -ne $Color.Count)
+		{
+			Write-Error "Colors, BackGroundColors parameters count doesn't match. Terminated."
+			return
+		}
+		if ($LinesBefore -ne 0) { for ($i = 0; $i -lt $LinesBefore; $i++) { Write-Host -Object "`n" -NoNewline } } # Add empty line before
+		if ($StartTab -ne 0) { for ($i = 0; $i -lt $StartTab; $i++) { Write-Host -Object "`t" -NoNewline } } # Add TABS before text
+		if ($StartSpaces -ne 0) { for ($i = 0; $i -lt $StartSpaces; $i++) { Write-Host -Object ' ' -NoNewline } } # Add SPACES before text
+		if ($ShowTime) { Write-Host -Object "[$([datetime]::Now.ToString($DateTimeFormat))] " -NoNewline } # Add Time before output
+		if ($Text.Count -ne 0)
+		{
+			if ($Color.Count -ge $Text.Count)
+			{
+				# the real deal coloring
+				if ($null -eq $BackGroundColor)
+				{
+					for ($i = 0; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -NoNewline }
+				}
+				else
+				{
+					for ($i = 0; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -BackgroundColor $BackGroundColor[$i] -NoNewline }
+				}
+			}
+			else
+			{
+				if ($null -eq $BackGroundColor)
+				{
+					for ($i = 0; $i -lt $Color.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -NoNewline }
+					for ($i = $Color.Length; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $DefaultColor -NoNewline }
+				}
+				else
+				{
+					for ($i = 0; $i -lt $Color.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -BackgroundColor $BackGroundColor[$i] -NoNewline }
+					for ($i = $Color.Length; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $DefaultColor -BackgroundColor $BackGroundColor[0] -NoNewline }
+				}
+			}
+		}
+		if ($NoNewLine -eq $true) { Write-Host -NoNewline }
+		else { Write-Host } # Support for no new line
+		if ($LinesAfter -ne 0) { for ($i = 0; $i -lt $LinesAfter; $i++) { Write-Host -Object "`n" -NoNewline } } # Add empty line after
+	}
+	if ($Text.Count -and $LogFile)
+	{
+		# Save to file
+		$TextToFile = ""
+		for ($i = 0; $i -lt $Text.Length; $i++)
+		{
+			$TextToFile += $Text[$i]
+		}
+		$Saved = $false
+		$Retry = 0
+		Do
+		{
+			$Retry++
+			try
+			{
+				if ($LogTime)
+				{
+					"[$([datetime]::Now.ToString($DateTimeFormat))] $TextToFile" | Out-File -FilePath $LogFile -Encoding $Encoding -Append -ErrorAction Stop -WhatIf:$false
+				}
+				else
+				{
+					"$TextToFile" | Out-File -FilePath $LogFile -Encoding $Encoding -Append -ErrorAction Stop -WhatIf:$false
+				}
+				$Saved = $true
+			}
+			catch
+			{
+				if ($Saved -eq $false -and $Retry -eq $LogRetry)
+				{
+					Write-Warning "Write-Color - Couldn't write to log file $($_.Exception.Message). Tried ($Retry/$LogRetry))"
+				}
+				else
+				{
+					Write-Warning "Write-Color - Couldn't write to log file $($_.Exception.Message). Retrying... ($Retry/$LogRetry)"
+				}
+			}
+		}
+		Until ($Saved -eq $true -or $Retry -ge $LogRetry)
+	}
 }
 
 #Setup proxy information for Invoke-WebRequest
@@ -351,7 +388,7 @@ while ($matchdetails.Success)
 		$matchdetails = $matchdetails.NextMatch()
 		continue
 	}
-
+	
 	if ($newUrl.EndsWith('All_9.zip'))
 	{
 		$matchdetails = $matchdetails.NextMatch()
@@ -373,7 +410,7 @@ while ($matchdetails.Success)
 	
 	if ($NetVersion -eq 4)
 	{
-		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and ( $newUrl.Contains('/net6/') -or $newUrl.Contains('/net9/') ))
+		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and ($newUrl.Contains('/net6/') -or $newUrl.Contains('/net9/')))
 		{
 			$matchdetails = $matchdetails.NextMatch()
 			continue
@@ -388,7 +425,7 @@ while ($matchdetails.Success)
 			continue
 		}
 	}
-
+	
 	if ($NetVersion -eq 9)
 	{
 		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and !$newUrl.Contains('/net9/'))
@@ -404,30 +441,36 @@ while ($matchdetails.Success)
 	#Write-Host $newUrl
 	
 	$headers = $null
-	try {
+	try
+	{
 		$response = Invoke-WebRequest @IWRProxyConfig -Uri $newUrl -UseBasicParsing -Method Head -ErrorAction Stop
 		$headers = $response.Headers
-	} catch {
-		if ($_.Exception.Response -ne $null) {
+	}
+	catch
+	{
+		if ($_.Exception.Response -ne $null)
+		{
 			$statusCode = $_.Exception.Response.StatusCode.value__
 			Write-Color -Text "* ", "HTTP error $statusCode for URL: $newUrl" -Color Yellow, Red
 			continue
-		} else {
+		}
+		else
+		{
 			Write-Color -Text "* ", "Network or connection error for URL: $newUrl. Error: $_" -Color Yellow, Red
 			continue
 		}
-	}	
-
- 	#Write-Host $headers
+	}
+	
+	#Write-Host $headers
 	
 	#Check if net version is set and act accordingly
 	#https://f001.backblazeb2.com/file/EricZimmermanTools/AmcacheParser.zip
 	#https://f001.backblazeb2.com/file/EricZimmermanTools/net6/AmcacheParser_6.zip
 	
 	$newUrl = $matchdetails.Value.Replace('https://f001.backblazeb2.com/file/EricZimmermanTools', 'https://download.ericzimmermanstools.com/')
-
+	
 	#Write-Host 'THIS IS' + $newUrl
-
+	
 	$getUrl = $newUrl
 	#$sha = $headers["x-bz-content-sha1"]
 	$sha = $headers["ETag"]
@@ -514,7 +557,7 @@ foreach ($td in $toDownload)
 				New-Item -ItemType directory -Path $tempDest > $null
 			}
 		}
-
+		
 		if ($is9)
 		{
 			$tempDest = Join-Path $tempDest "net9"
