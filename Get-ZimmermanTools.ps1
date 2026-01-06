@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    This script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest. By default, ONLY .net 6 builds are downloaded.
+    This script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest. By default, ONLY .net 9 builds are downloaded.
 .DESCRIPTION
     A file will also be created in $Dest that tracks the signature of each file, so rerunning the script will only download new versions. To redownload, remove lines from or delete the CSV file created under $Dest and rerun.
 .PARAMETER Dest
