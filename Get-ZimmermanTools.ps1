@@ -9,7 +9,7 @@
 		The path you want to save the programs to.
 	
 	.PARAMETER NetVersion
-		Which .net version to get. Default is ONLY net 9 builds as of 2025-05-18. Specify 4, 6, or 9 to only get tools built against that version of .net, or 0 for all.
+		Which .net version to get. Default is ONLY net 9 builds as of 2025-05-18. Specify 4 or 9 to only get tools built against that version of .net, or 0 for all.
 	
 	.PARAMETER Proxy
 		Specifies a proxy server for the request, rather than connecting directly to the Internet resource. Enter the URI of a network proxy server.
@@ -40,7 +40,7 @@ param
 (
 	[Alias('d')]
 	[string]$Dest = (Resolve-Path "."),
-	[ValidateSet('0', '4', '6', '9')]
+	[ValidateSet('0', '4', '9')]
 	[Alias('nv')]
 	[int]$NetVersion = (9),
 	[Parameter(ParameterSetName = 'ProxyAlone',
@@ -309,7 +309,7 @@ Write-Color "A file will also be created in $Dest that tracks the signature of e
 Write-Color "so rerunning the script will only download new versions."
 Write-Color -LinesBefore 1 -Text "To redownload, remove lines from or delete the CSV file created under $Dest and rerun. Enjoy!"
 
-Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4, 6, or 9). Default is 9. Use 0 to get all" -LinesAfter 1 -BackgroundColor Green
+Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4 or 9). Default is 9. Use 0 to get all" -LinesAfter 1 -BackgroundColor Green
 
 $TestColor = (Get-Host).ui.rawui.ForegroundColor
 if ($TestColor -eq -1 -or $null -eq $TestColor)
@@ -368,13 +368,7 @@ while ($matchdetails.Success)
 		$matchdetails = $matchdetails.NextMatch()
 		continue
 	}
-	
-	if ($newUrl.EndsWith('All_6.zip'))
-	{
-		$matchdetails = $matchdetails.NextMatch()
-		continue
-	}
-	
+		
 	if ($newUrl.EndsWith('All_9.zip'))
 	{
 		$matchdetails = $matchdetails.NextMatch()
@@ -390,22 +384,12 @@ while ($matchdetails.Success)
 	#Write-Host $newUrl
 	
 	$uniqueUrlhash.Add($newUrl, $newUrl)
-	
-	$isnet6 = $false
+		
 	$isnet9 = $false
 	
 	if ($NetVersion -eq 4)
 	{
-		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and ($newUrl.Contains('/net6/') -or $newUrl.Contains('/net9/')))
-		{
-			$matchdetails = $matchdetails.NextMatch()
-			continue
-		}
-	}
-	
-	if ($NetVersion -eq 6)
-	{
-		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and !$newUrl.Contains('/net6/'))
+		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and $newUrl.Contains('/net9/'))
 		{
 			$matchdetails = $matchdetails.NextMatch()
 			continue
@@ -421,7 +405,6 @@ while ($matchdetails.Success)
 		}
 	}
 	
-	$isnet6 = $newUrl.Contains('/net6/')
 	$isnet9 = $newUrl.Contains('/net9/')
 	
 	#Write-Host $newUrl
@@ -451,7 +434,7 @@ while ($matchdetails.Success)
 	
 	#Check if net version is set and act accordingly
 	#https://f001.backblazeb2.com/file/EricZimmermanTools/AmcacheParser.zip
-	#https://f001.backblazeb2.com/file/EricZimmermanTools/net6/AmcacheParser_6.zip
+	#https://f001.backblazeb2.com/file/EricZimmermanTools/net9/AmcacheParser_6.zip
 	
 	$newUrl = $matchdetails.Value.Replace('https://f001.backblazeb2.com/file/EricZimmermanTools', 'https://download.ericzimmermanstools.com/')
 	
@@ -463,7 +446,7 @@ while ($matchdetails.Success)
 	#$name = $headers["x-bz-file-name"]
 	$name = ([uri]$getUrl).Segments[-1]
 	
-	if ($isnet6 -or $isnet9)
+	if ($isnet9)
 	{
 		$name = Split-Path $name -leaf
 	}
@@ -475,7 +458,6 @@ while ($matchdetails.Success)
 		SHA1 = [string]$sha
 		URL  = [string]$getUrl
 		Size = [string]$size
-		IsNet6 = [bool]$isnet6
 		IsNet9 = [bool]$isnet9
 	}
 	
@@ -531,18 +513,7 @@ foreach ($td in $toDownload)
 		$dUrl = $td.URL
 		$size = $td.Size -as [long]
 		$name = $td.Name
-		$is6 = $td.IsNet6
 		$is9 = $td.IsNet9
-		
-		if ($is6)
-		{
-			$tempDest = Join-Path $tempDest "net6"
-			if (!(Test-Path -Path $tempDest))
-			{
-				Write-Color -Text "* ", "$tempDest does not exist. Creating..." -Color Green, $defaultColor
-				New-Item -ItemType directory -Path $tempDest > $null
-			}
-		}
 		
 		if ($is9)
 		{
@@ -561,10 +532,6 @@ foreach ($td in $toDownload)
 		Invoke-WebRequest @IWRProxyConfig -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
 		
 		$extraInfo = ""
-		if ($is6)
-		{
-			$extraInfo = " (net 6)"
-		}
 		if ($is9)
 		{
 			$extraInfo = " (net 9)"
@@ -641,122 +608,3 @@ if ($Sync)
 		}
 	}
 }
-
-# SIG # Begin signature block
-# MIIVuwYJKoZIhvcNAQcCoIIVrDCCFagCAQExDzANBglghkgBZQMEAgEFADB5Bgor
-# BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAAEFnLhv9WOYvR
-# 8RoJK8ngEst6fz9Dp/KwfJ4LWQvgWqCCEfYwggVvMIIEV6ADAgECAhBI/JO0YFWU
-# jTanyYqJ1pQWMA0GCSqGSIb3DQEBDAUAMHsxCzAJBgNVBAYTAkdCMRswGQYDVQQI
-# DBJHcmVhdGVyIE1hbmNoZXN0ZXIxEDAOBgNVBAcMB1NhbGZvcmQxGjAYBgNVBAoM
-# EUNvbW9kbyBDQSBMaW1pdGVkMSEwHwYDVQQDDBhBQUEgQ2VydGlmaWNhdGUgU2Vy
-# dmljZXMwHhcNMjEwNTI1MDAwMDAwWhcNMjgxMjMxMjM1OTU5WjBWMQswCQYDVQQG
-# EwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1pdGVkMS0wKwYDVQQDEyRTZWN0aWdv
-# IFB1YmxpYyBDb2RlIFNpZ25pbmcgUm9vdCBSNDYwggIiMA0GCSqGSIb3DQEBAQUA
-# A4ICDwAwggIKAoICAQCN55QSIgQkdC7/FiMCkoq2rjaFrEfUI5ErPtx94jGgUW+s
-# hJHjUoq14pbe0IdjJImK/+8Skzt9u7aKvb0Ffyeba2XTpQxpsbxJOZrxbW6q5KCD
-# J9qaDStQ6Utbs7hkNqR+Sj2pcaths3OzPAsM79szV+W+NDfjlxtd/R8SPYIDdub7
-# P2bSlDFp+m2zNKzBenjcklDyZMeqLQSrw2rq4C+np9xu1+j/2iGrQL+57g2extme
-# me/G3h+pDHazJyCh1rr9gOcB0u/rgimVcI3/uxXP/tEPNqIuTzKQdEZrRzUTdwUz
-# T2MuuC3hv2WnBGsY2HH6zAjybYmZELGt2z4s5KoYsMYHAXVn3m3pY2MeNn9pib6q
-# RT5uWl+PoVvLnTCGMOgDs0DGDQ84zWeoU4j6uDBl+m/H5x2xg3RpPqzEaDux5mcz
-# mrYI4IAFSEDu9oJkRqj1c7AGlfJsZZ+/VVscnFcax3hGfHCqlBuCF6yH6bbJDoEc
-# QNYWFyn8XJwYK+pF9e+91WdPKF4F7pBMeufG9ND8+s0+MkYTIDaKBOq3qgdGnA2T
-# OglmmVhcKaO5DKYwODzQRjY1fJy67sPV+Qp2+n4FG0DKkjXp1XrRtX8ArqmQqsV/
-# AZwQsRb8zG4Y3G9i/qZQp7h7uJ0VP/4gDHXIIloTlRmQAOka1cKG8eOO7F/05QID
-# AQABo4IBEjCCAQ4wHwYDVR0jBBgwFoAUoBEKIz6W8Qfs4q8p74Klf9AwpLQwHQYD
-# VR0OBBYEFDLrkpr/NZZILyhAQnAgNpFcF4XmMA4GA1UdDwEB/wQEAwIBhjAPBgNV
-# HRMBAf8EBTADAQH/MBMGA1UdJQQMMAoGCCsGAQUFBwMDMBsGA1UdIAQUMBIwBgYE
-# VR0gADAIBgZngQwBBAEwQwYDVR0fBDwwOjA4oDagNIYyaHR0cDovL2NybC5jb21v
-# ZG9jYS5jb20vQUFBQ2VydGlmaWNhdGVTZXJ2aWNlcy5jcmwwNAYIKwYBBQUHAQEE
-# KDAmMCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5jb21vZG9jYS5jb20wDQYJKoZI
-# hvcNAQEMBQADggEBABK/oe+LdJqYRLhpRrWrJAoMpIpnuDqBv0WKfVIHqI0fTiGF
-# OaNrXi0ghr8QuK55O1PNtPvYRL4G2VxjZ9RAFodEhnIq1jIV9RKDwvnhXRFAZ/ZC
-# J3LFI+ICOBpMIOLbAffNRk8monxmwFE2tokCVMf8WPtsAO7+mKYulaEMUykfb9gZ
-# pk+e96wJ6l2CxouvgKe9gUhShDHaMuwV5KZMPWw5c9QLhTkg4IUaaOGnSDip0TYl
-# d8GNGRbFiExmfS9jzpjoad+sPKhdnckcW67Y8y90z7h+9teDnRGWYpquRRPaf9xH
-# +9/DUp/mBlXpnYzyOmJRvOwkDynUWICE5EV7WtgwggYaMIIEAqADAgECAhBiHW0M
-# UgGeO5B5FSCJIRwKMA0GCSqGSIb3DQEBDAUAMFYxCzAJBgNVBAYTAkdCMRgwFgYD
-# VQQKEw9TZWN0aWdvIExpbWl0ZWQxLTArBgNVBAMTJFNlY3RpZ28gUHVibGljIENv
-# ZGUgU2lnbmluZyBSb290IFI0NjAeFw0yMTAzMjIwMDAwMDBaFw0zNjAzMjEyMzU5
-# NTlaMFQxCzAJBgNVBAYTAkdCMRgwFgYDVQQKEw9TZWN0aWdvIExpbWl0ZWQxKzAp
-# BgNVBAMTIlNlY3RpZ28gUHVibGljIENvZGUgU2lnbmluZyBDQSBSMzYwggGiMA0G
-# CSqGSIb3DQEBAQUAA4IBjwAwggGKAoIBgQCbK51T+jU/jmAGQ2rAz/V/9shTUxjI
-# ztNsfvxYB5UXeWUzCxEeAEZGbEN4QMgCsJLZUKhWThj/yPqy0iSZhXkZ6Pg2A2NV
-# DgFigOMYzB2OKhdqfWGVoYW3haT29PSTahYkwmMv0b/83nbeECbiMXhSOtbam+/3
-# 6F09fy1tsB8je/RV0mIk8XL/tfCK6cPuYHE215wzrK0h1SWHTxPbPuYkRdkP05Zw
-# mRmTnAO5/arnY83jeNzhP06ShdnRqtZlV59+8yv+KIhE5ILMqgOZYAENHNX9SJDm
-# +qxp4VqpB3MV/h53yl41aHU5pledi9lCBbH9JeIkNFICiVHNkRmq4TpxtwfvjsUe
-# dyz8rNyfQJy/aOs5b4s+ac7IH60B+Ja7TVM+EKv1WuTGwcLmoU3FpOFMbmPj8pz4
-# 4MPZ1f9+YEQIQty/NQd/2yGgW+ufflcZ/ZE9o1M7a5Jnqf2i2/uMSWymR8r2oQBM
-# dlyh2n5HirY4jKnFH/9gRvd+QOfdRrJZb1sCAwEAAaOCAWQwggFgMB8GA1UdIwQY
-# MBaAFDLrkpr/NZZILyhAQnAgNpFcF4XmMB0GA1UdDgQWBBQPKssghyi47G9IritU
-# pimqF6TNDDAOBgNVHQ8BAf8EBAMCAYYwEgYDVR0TAQH/BAgwBgEB/wIBADATBgNV
-# HSUEDDAKBggrBgEFBQcDAzAbBgNVHSAEFDASMAYGBFUdIAAwCAYGZ4EMAQQBMEsG
-# A1UdHwREMEIwQKA+oDyGOmh0dHA6Ly9jcmwuc2VjdGlnby5jb20vU2VjdGlnb1B1
-# YmxpY0NvZGVTaWduaW5nUm9vdFI0Ni5jcmwwewYIKwYBBQUHAQEEbzBtMEYGCCsG
-# AQUFBzAChjpodHRwOi8vY3J0LnNlY3RpZ28uY29tL1NlY3RpZ29QdWJsaWNDb2Rl
-# U2lnbmluZ1Jvb3RSNDYucDdjMCMGCCsGAQUFBzABhhdodHRwOi8vb2NzcC5zZWN0
-# aWdvLmNvbTANBgkqhkiG9w0BAQwFAAOCAgEABv+C4XdjNm57oRUgmxP/BP6YdURh
-# w1aVcdGRP4Wh60BAscjW4HL9hcpkOTz5jUug2oeunbYAowbFC2AKK+cMcXIBD0Zd
-# OaWTsyNyBBsMLHqafvIhrCymlaS98+QpoBCyKppP0OcxYEdU0hpsaqBBIZOtBajj
-# cw5+w/KeFvPYfLF/ldYpmlG+vd0xqlqd099iChnyIMvY5HexjO2AmtsbpVn0OhNc
-# WbWDRF/3sBp6fWXhz7DcML4iTAWS+MVXeNLj1lJziVKEoroGs9Mlizg0bUMbOalO
-# hOfCipnx8CaLZeVme5yELg09Jlo8BMe80jO37PU8ejfkP9/uPak7VLwELKxAMcJs
-# zkyeiaerlphwoKx1uHRzNyE6bxuSKcutisqmKL5OTunAvtONEoteSiabkPVSZ2z7
-# 6mKnzAfZxCl/3dq3dUNw4rg3sTCggkHSRqTqlLMS7gjrhTqBmzu1L90Y1KWN/Y5J
-# KdGvspbOrTfOXyXvmPL6E52z1NZJ6ctuMFBQZH3pwWvqURR8AgQdULUvrxjUYbHH
-# j95Ejza63zdrEcxWLDX6xWls/GDnVNueKjWUH3fTv1Y8Wdho698YADR7TNx8X8z2
-# Bev6SivBBOHY+uqiirZtg0y9ShQoPzmCcn63Syatatvx157YK9hlcPmVoa1oDE5/
-# L9Uo2bC5a4CH2RwwggZhMIIEyaADAgECAhEAjBvils2zwjIqORJ4bVTEYTANBgkq
-# hkiG9w0BAQwFADBUMQswCQYDVQQGEwJHQjEYMBYGA1UEChMPU2VjdGlnbyBMaW1p
-# dGVkMSswKQYDVQQDEyJTZWN0aWdvIFB1YmxpYyBDb2RlIFNpZ25pbmcgQ0EgUjM2
-# MB4XDTIzMDMwMzAwMDAwMFoXDTI2MDMwMjIzNTk1OVowVzELMAkGA1UEBhMCVVMx
-# EDAOBgNVBAgMB0luZGlhbmExGjAYBgNVBAoMEUVyaWMgUi4gWmltbWVybWFuMRow
-# GAYDVQQDDBFFcmljIFIuIFppbW1lcm1hbjCCAiIwDQYJKoZIhvcNAQEBBQADggIP
-# ADCCAgoCggIBANn/rNwsql8kzji1V5VB6wbTzlAWcO9OlGpYacDa5c51U8a3pGJz
-# ss8jkbFghih927eHNYzUGHu3Qy7qCOROnZwKm5Da+N+yKyq1NX7LWwSfwpK6pa4S
-# 7Y/LjgEDD6y/Vl9og+1F9mkTjDjP6rj8tMgKT6Pg+pfQPVL5oI4eV+5LbouPjSho
-# gXgsf+UpN3CrX6MKDk40HEAsgura7fG5WzZXK0UruurloxTJZ2edlOFdU8KNswsk
-# AncqZXRMhLkp89WE68e+Q+PybbVP+im+cHZWqDYAb4mu0cYLiCQxQUPGJ6AB+O9M
-# kNAi9pO+qtZ5N+5ReNXENE9jokO/PDM7/tDVbODfZlHTgPecn2Hhhu+LiikrCPPd
-# +5KFDU9kgaZ8N/L6qt2omNgqF3BXCo08beDiMfcs8veilCjWlzN8BTHrjhKctslu
-# 0thGSqdQSOD6W8WawLxYlPMP4Fp7QEmHvJTYWQCdv0c6/HwMiDUGOZ2RT2i1g9Ck
-# K7RSEh7shuLo1iW8OTyQX+Ecud7NpIQ3i2mMLcZZsqGF9erFxZrcD0TFqgX4peyH
-# Y8Ig+5BYXY/w3VI9sYPWpH3kRwhqYMi0If9U+lfLUu3yoeKtIy6yH7NNnBAkOpE0
-# k5K1ydHwFHH8O2QK9QslhUWIrkDK0etGPQfRqu349OtE/ddh4ySZOyklAgMBAAGj
-# ggGpMIIBpTAfBgNVHSMEGDAWgBQPKssghyi47G9IritUpimqF6TNDDAdBgNVHQ4E
-# FgQUOKRo/KEN0+hPPe2Rb2aIduqumqcwDgYDVR0PAQH/BAQDAgeAMAwGA1UdEwEB
-# /wQCMAAwEwYDVR0lBAwwCgYIKwYBBQUHAwMwSgYDVR0gBEMwQTA1BgwrBgEEAbIx
-# AQIBAwIwJTAjBggrBgEFBQcCARYXaHR0cHM6Ly9zZWN0aWdvLmNvbS9DUFMwCAYG
-# Z4EMAQQBMEkGA1UdHwRCMEAwPqA8oDqGOGh0dHA6Ly9jcmwuc2VjdGlnby5jb20v
-# U2VjdGlnb1B1YmxpY0NvZGVTaWduaW5nQ0FSMzYuY3JsMHkGCCsGAQUFBwEBBG0w
-# azBEBggrBgEFBQcwAoY4aHR0cDovL2NydC5zZWN0aWdvLmNvbS9TZWN0aWdvUHVi
-# bGljQ29kZVNpZ25pbmdDQVIzNi5jcnQwIwYIKwYBBQUHMAGGF2h0dHA6Ly9vY3Nw
-# LnNlY3RpZ28uY29tMB4GA1UdEQQXMBWBE2VyaWNAemltdGVjaDRuNi5jb20wDQYJ
-# KoZIhvcNAQEMBQADggGBAIeSKPPdudG4ADR2jSIzrrBQJIjnUr+FN0Zij4+rKmEW
-# MwoxLkqMwsn1T+a06E2c2+IFuasbNhsUhe+SssC04DntS2Mk48SY/E52LD0gGJNW
-# UzfgFej9e8AYaZa3y8oFL4NmBuhXJcc2yhJVRObJ84USi4vmj1JmbebTDWS6sEq8
-# yRdGoerMW++GP3SZvGKo25bYr1QKtdOLaMVUp6c3ILUyfiPUGsiPR9JWhmMqe/FX
-# 3/6YFp+A01nxLqV6ya7+by+TBBLeKd6OUqflzmBV/i2eKvk+DIj1uRvesszQ/DbK
-# zaLvls9+KUDLEUk80GjQ/PK0Y5oW+9gTGQ9ct/OIGATzsXGRL38SZJE0L3vuEUny
-# lMyK1MQxmPj95DCncIGKbihZMBsjxi89K1rWU5Ka4rN6mCXDh2+RboTac90IwpGL
-# dKuBRalIpkCXYY4FQ44SuEmdZx8zlm2Kfcg1k96mGFPOtvFpZtJzqpqWVUlcG1Sa
-# SzntLunzWbjPdE9x/AXPwjGCAxswggMXAgEBMGkwVDELMAkGA1UEBhMCR0IxGDAW
-# BgNVBAoTD1NlY3RpZ28gTGltaXRlZDErMCkGA1UEAxMiU2VjdGlnbyBQdWJsaWMg
-# Q29kZSBTaWduaW5nIENBIFIzNgIRAIwb4pbNs8IyKjkSeG1UxGEwDQYJYIZIAWUD
-# BAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMx
-# DAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkq
-# hkiG9w0BCQQxIgQgSr8l19XI4OBgc0kH+1P4IAmn7GdJjxlHkGbRwq7R5+YwDQYJ
-# KoZIhvcNAQEBBQAEggIAlmkBlZ4okY+L00Y5oW9w6g8F86XUPHNUVf1aLz63X4Cd
-# b1kCDYk4tazUqyoHAaLcuPj4Xk6/4a1T4iXjHjJGT+LoMx+PoFzR7C+iSp4ulcoA
-# gyrDx6H33RzGn6UF17No0i9LX4yZvljrTdDEp4UCZDC/7n2BmmIb/M4a1HeU5ekG
-# n0Ap2GYT+OE3c8VL/Ag4Y8Vn1UJvuqmSAGdUsxpiybYugGDN08Hq4njwcV5ulQ6g
-# yx0V57SfkT0wItWDpvVDt5BFKCB8kGetp7cqsz00NIthf+CWE8NEol2hxEoEtAju
-# fZBPCYPctjugXIUiIHvDdo+cPQ/xo29zd2v7E/jEmb1pk0kTolC8CvACO1c0O4EW
-# e8rOV0a+5Lx51V0ZFX5SOKkX9P2tzxjyeviCdn2HfqjiB0d+U6D8Izact+p2qQuY
-# IAqkmuT76V8UdPS3dW5CDqfSfRmDtgvE9qYnsXdu+O9uPAiRZbr4ly7Wr16In2px
-# /1p20d4R/IdjXUpdIfYEM6iSR2eu57FcfJIHSK7eAN8Kv0QQ+XTWfqne5Azh0wyH
-# uNCWyRNmahdAsJ1yLywgTL0Hbb8Z9XzJe/vb0Nxg3obrr64ZUAfQbxD6H8m3G7w2
-# RpChU+vtGgQWPWM9T8wVFA/QdoZX08lPSDiEXSwGVhxtS84YmgVcGHhavIwBpmk=
-# SIG # End signature block
