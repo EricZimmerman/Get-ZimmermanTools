@@ -331,7 +331,7 @@ if (!(Test-Path -Path $Dest))
 	$newInstall = $true
 }
 
-$URL = "https://raw.githubusercontent.com/EricZimmerman/ericzimmerman.github.io/master/index.md"
+$URL = "https://tools.ericzimmermanstools.com"
 
 $WebKeyCollection = @()
 
