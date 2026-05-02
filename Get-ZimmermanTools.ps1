@@ -363,6 +363,12 @@ while ($matchdetails.Success)
 {
 	$newUrl = $matchdetails.Value.Replace('https://f001.backblazeb2.com/file/EricZimmermanTools/', 'https://download.ericzimmermanstools.com/')
 	
+	if ($newUrl.EndsWith('kape.zip'))
+	{
+		$matchdetails = $matchdetails.NextMatch()
+		continue
+	}
+	
 	if ($newUrl.EndsWith('All.zip'))
 	{
 		$matchdetails = $matchdetails.NextMatch()
