@@ -1,6 +1,6 @@
 <#
 	.SYNOPSIS
-		This script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest. By default, ONLY .net 9 builds are downloaded.
+		This script will discover and download all available programs from https://ericzimmerman.github.io and download them to $Dest. By default, ONLY .net 10 builds are downloaded.
 	
 	.DESCRIPTION
 		A file will also be created in $Dest that tracks the signature of each file, so rerunning the script will only download new versions. To redownload, remove lines from or delete the CSV file created under $Dest and rerun.
@@ -9,7 +9,7 @@
 		The path you want to save the programs to.
 	
 	.PARAMETER NetVersion
-		Which .net version to get. Default is ONLY net 9 builds as of 2025-05-18. Specify 4 or 9 to only get tools built against that version of .net, or 0 for all.
+		Which .net version to get. Default is ONLY net 10 builds as of 2026-10-17. Specify 4 or 10 to only get tools built against that version of .net, or 0 for all. 9 is still accepted and is treated as 10.
 	
 	.PARAMETER Proxy
 		Specifies a proxy server for the request, rather than connecting directly to the Internet resource. Enter the URI of a network proxy server.
@@ -40,9 +40,9 @@ param
 (
 	[Alias('d')]
 	[string]$Dest = (Resolve-Path "."),
-	[ValidateSet('0', '4', '9')]
+	[ValidateSet('0', '4', '9', '10')]
 	[Alias('nv')]
-	[int]$NetVersion = (9),
+	[int]$NetVersion = (10),
 	[Parameter(ParameterSetName = 'ProxyAlone',
 			   Mandatory = $true)]
 	[Parameter(ParameterSetName = 'ProxyWithCreds',
@@ -66,242 +66,107 @@ param
 
 function Write-Color
 {
-    <#
-    .SYNOPSIS
-    Write-Color is a wrapper around Write-Host delivering a lot of additional features for easier color options.
-
-    .DESCRIPTION
-    Write-Color is a wrapper around Write-Host delivering a lot of additional features for easier color options.
-
-    It provides:
-    - Easy manipulation of colors,
-    - Logging output to file (log)
-    - Nice formatting options out of the box.
-    - Ability to use aliases for parameters
-
-    .PARAMETER Text
-    Text to display on screen and write to log file if specified.
-    Accepts an array of strings.
-
-    .PARAMETER Color
-    Color of the text. Accepts an array of colors. If more than one color is specified it will loop through colors for each string.
-    If there are more strings than colors it will start from the beginning.
-    Available colors are: Black, DarkBlue, DarkGreen, DarkCyan, DarkRed, DarkMagenta, DarkYellow, Gray, DarkGray, Blue, Green, Cyan, Red, Magenta, Yellow, White
-
-    .PARAMETER BackGroundColor
-    Color of the background. Accepts an array of colors. If more than one color is specified it will loop through colors for each string.
-    If there are more strings than colors it will start from the beginning.
-    Available colors are: Black, DarkBlue, DarkGreen, DarkCyan, DarkRed, DarkMagenta, DarkYellow, Gray, DarkGray, Blue, Green, Cyan, Red, Magenta, Yellow, White
-
-    .PARAMETER StartTab
-    Number of tabs to add before text. Default is 0.
-
-    .PARAMETER LinesBefore
-    Number of empty lines before text. Default is 0.
-
-    .PARAMETER LinesAfter
-    Number of empty lines after text. Default is 0.
-
-    .PARAMETER StartSpaces
-    Number of spaces to add before text. Default is 0.
-
-    .PARAMETER LogFile
-    Path to log file. If not specified no log file will be created.
-
-    .PARAMETER DateTimeFormat
-    Custom date and time format string. Default is yyyy-MM-dd HH:mm:ss
-
-    .PARAMETER LogTime
-    If set to $true it will add time to log file. Default is $true.
-
-    .PARAMETER LogRetry
-    Number of retries to write to log file, in case it can't write to it for some reason, before skipping. Default is 2.
-
-    .PARAMETER Encoding
-    Encoding of the log file. Default is Unicode.
-
-    .PARAMETER ShowTime
-    Switch to add time to console output. Default is not set.
-
-    .PARAMETER NoNewLine
-    Switch to not add new line at the end of the output. Default is not set.
-
-    .PARAMETER NoConsoleOutput
-    Switch to not output to console. Default all output goes to console.
-
-    .EXAMPLE
-    Write-Color -Text "Red ", "Green ", "Yellow " -Color Red,Green,Yellow
-
-    .EXAMPLE
-    Write-Color -Text "This is text in Green ",
-                      "followed by red ",
-                      "and then we have Magenta... ",
-                      "isn't it fun? ",
-                      "Here goes DarkCyan" -Color Green,Red,Magenta,White,DarkCyan
-
-    .EXAMPLE
-    Write-Color -Text "This is text in Green ",
-                      "followed by red ",
-                      "and then we have Magenta... ",
-                      "isn't it fun? ",
-                      "Here goes DarkCyan" -Color Green,Red,Magenta,White,DarkCyan -StartTab 3 -LinesBefore 1 -LinesAfter 1
-
-    .EXAMPLE
-    Write-Color "1. ", "Option 1" -Color Yellow, Green
-    Write-Color "2. ", "Option 2" -Color Yellow, Green
-    Write-Color "3. ", "Option 3" -Color Yellow, Green
-    Write-Color "4. ", "Option 4" -Color Yellow, Green
-    Write-Color "9. ", "Press 9 to exit" -Color Yellow, Gray -LinesBefore 1
-
-    .EXAMPLE
-    Write-Color -LinesBefore 2 -Text "This little ","message is ", "written to log ", "file as well." `
-                -Color Yellow, White, Green, Red, Red -LogFile "C:\testing.txt" -TimeFormat "yyyy-MM-dd HH:mm:ss"
-    Write-Color -Text "This can get ","handy if ", "want to display things, and log actions to file ", "at the same time." `
-                -Color Yellow, White, Green, Red, Red -LogFile "C:\testing.txt"
-
-    .EXAMPLE
-    Write-Color -T "My text", " is ", "all colorful" -C Yellow, Red, Green -B Green, Green, Yellow
-    Write-Color -t "my text" -c yellow -b green
-    Write-Color -text "my text" -c red
-
-    .EXAMPLE
-    Write-Color -Text "Testuję czy się ładnie zapisze, czy będą problemy" -Encoding unicode -LogFile 'C:\temp\testinggg.txt' -Color Red -NoConsoleOutput
-
-    .NOTES
-    Understanding Custom date and time format strings: https://learn.microsoft.com/en-us/dotnet/standard/base-types/custom-date-and-time-format-strings
-    Project support: https://github.com/EvotecIT/PSWriteColor
-    Original idea: Josh (https://stackoverflow.com/users/81769/josh)
-
-    #>
-	[alias('Write-Colour')]
-	[CmdletBinding()]
-	param (
-		[alias ('T')]
-		[String[]]$Text,
-		[alias ('C', 'ForegroundColor', 'FGC')]
-		[ConsoleColor[]]$Color = [ConsoleColor]::White,
-		[alias ('B', 'BGC')]
-		[ConsoleColor[]]$BackGroundColor = $null,
-		[alias ('Indent')]
-		[int]$StartTab = 0,
+	<#
+	.SYNOPSIS
+		Writes one line built from segments. Text[i] is written in Color[i]. Segments without a matching color use the console's default color
+	#>
+	param
+	(
+		[Parameter(Position = 0)]
+		[string[]]$Text,
+		[ConsoleColor[]]$Color = @(),
+		[Nullable[ConsoleColor]]$BackgroundColor,
 		[int]$LinesBefore = 0,
-		[int]$LinesAfter = 0,
-		[int]$StartSpaces = 0,
-		[alias ('L')]
-		[string]$LogFile = '',
-		[Alias('DateFormat', 'TimeFormat')]
-		[string]$DateTimeFormat = 'yyyy-MM-dd HH:mm:ss',
-		[alias ('LogTimeStamp')]
-		[bool]$LogTime = $true,
-		[int]$LogRetry = 2,
-		[ValidateSet('unknown', 'string', 'unicode', 'bigendianunicode', 'utf8', 'utf7', 'utf32', 'ascii', 'default', 'oem')]
-		[string]$Encoding = 'Unicode',
-		[switch]$ShowTime,
-		[switch]$NoNewLine,
-		[alias('HideConsole')]
-		[switch]$NoConsoleOutput
+		[int]$LinesAfter = 0
 	)
-	if (-not $NoConsoleOutput)
+
+	if ($LinesBefore -gt 0) { Write-Host ("`n" * $LinesBefore) -NoNewline }
+
+	for ($i = 0; $i -lt $Text.Count; $i++)
 	{
-		$DefaultColor = $Color[0]
-		if ($null -ne $BackGroundColor -and $BackGroundColor.Count -ne $Color.Count)
-		{
-			Write-Error "Colors, BackGroundColors parameters count doesn't match. Terminated."
-			return
-		}
-		if ($LinesBefore -ne 0) { for ($i = 0; $i -lt $LinesBefore; $i++) { Write-Host -Object "`n" -NoNewline } } # Add empty line before
-		if ($StartTab -ne 0) { for ($i = 0; $i -lt $StartTab; $i++) { Write-Host -Object "`t" -NoNewline } } # Add TABS before text
-		if ($StartSpaces -ne 0) { for ($i = 0; $i -lt $StartSpaces; $i++) { Write-Host -Object ' ' -NoNewline } } # Add SPACES before text
-		if ($ShowTime) { Write-Host -Object "[$([datetime]::Now.ToString($DateTimeFormat))] " -NoNewline } # Add Time before output
-		if ($Text.Count -ne 0)
-		{
-			if ($Color.Count -ge $Text.Count)
-			{
-				# the real deal coloring
-				if ($null -eq $BackGroundColor)
-				{
-					for ($i = 0; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -NoNewline }
-				}
-				else
-				{
-					for ($i = 0; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -BackgroundColor $BackGroundColor[$i] -NoNewline }
-				}
-			}
-			else
-			{
-				if ($null -eq $BackGroundColor)
-				{
-					for ($i = 0; $i -lt $Color.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -NoNewline }
-					for ($i = $Color.Length; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $DefaultColor -NoNewline }
-				}
-				else
-				{
-					for ($i = 0; $i -lt $Color.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $Color[$i] -BackgroundColor $BackGroundColor[$i] -NoNewline }
-					for ($i = $Color.Length; $i -lt $Text.Length; $i++) { Write-Host -Object $Text[$i] -ForegroundColor $DefaultColor -BackgroundColor $BackGroundColor[0] -NoNewline }
-				}
-			}
-		}
-		if ($NoNewLine -eq $true) { Write-Host -NoNewline }
-		else { Write-Host } # Support for no new line
-		if ($LinesAfter -ne 0) { for ($i = 0; $i -lt $LinesAfter; $i++) { Write-Host -Object "`n" -NoNewline } } # Add empty line after
+		$hostArgs = @{ Object = $Text[$i]; NoNewline = $true }
+		if ($i -lt $Color.Count) { $hostArgs.ForegroundColor = $Color[$i] }
+		if ($null -ne $BackgroundColor) { $hostArgs.BackgroundColor = $BackgroundColor }
+		Write-Host @hostArgs
 	}
-	if ($Text.Count -and $LogFile)
+	Write-Host
+
+	if ($LinesAfter -gt 0) { Write-Host ("`n" * $LinesAfter) -NoNewline }
+}
+
+function Expand-Zip
+{
+	<#
+	.SYNOPSIS
+		Extracts a zip file to Destination, overwriting existing files. Much faster than Expand-Archive, especially on Windows PowerShell
+	#>
+	param
+	(
+		[string]$Path,
+		[string]$Destination
+	)
+
+	$root = [IO.Path]::GetFullPath($Destination).TrimEnd('\') + '\'
+	$zip = [IO.Compression.ZipFile]::OpenRead($Path)
+	try
 	{
-		# Save to file
-		$TextToFile = ""
-		for ($i = 0; $i -lt $Text.Length; $i++)
+		foreach ($entry in $zip.Entries)
 		{
-			$TextToFile += $Text[$i]
-		}
-		$Saved = $false
-		$Retry = 0
-		Do
-		{
-			$Retry++
-			try
+			$target = [IO.Path]::GetFullPath([IO.Path]::Combine($root, $entry.FullName))
+
+			#Never write outside of the destination directory (zip slip)
+			if (!$target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase))
 			{
-				if ($LogTime)
-				{
-					"[$([datetime]::Now.ToString($DateTimeFormat))] $TextToFile" | Out-File -FilePath $LogFile -Encoding $Encoding -Append -ErrorAction Stop -WhatIf:$false
-				}
-				else
-				{
-					"$TextToFile" | Out-File -FilePath $LogFile -Encoding $Encoding -Append -ErrorAction Stop -WhatIf:$false
-				}
-				$Saved = $true
+				throw "Zip entry '$($entry.FullName)' points outside of $Destination"
 			}
-			catch
+
+			if ($entry.Name -eq '')
 			{
-				if ($Saved -eq $false -and $Retry -eq $LogRetry)
-				{
-					Write-Warning "Write-Color - Couldn't write to log file $($_.Exception.Message). Tried ($Retry/$LogRetry))"
-				}
-				else
-				{
-					Write-Warning "Write-Color - Couldn't write to log file $($_.Exception.Message). Retrying... ($Retry/$LogRetry)"
-				}
+				#Directory entry
+				[void][IO.Directory]::CreateDirectory($target)
+				continue
 			}
+
+			[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
+			[IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
 		}
-		Until ($Saved -eq $true -or $Retry -ge $LogRetry)
+	}
+	finally
+	{
+		$zip.Dispose()
 	}
 }
 
-#Setup proxy information for Invoke-WebRequest
-[hashtable]$IWRProxyConfig = @{ }
+Add-Type -AssemblyName System.Net.Http, System.IO.Compression, System.IO.Compression.FileSystem
+
+#Windows PowerShell only allows 2 connections per host by default (which defeats the parallel downloads below) and may not offer TLS 1.2
+[Net.ServicePointManager]::DefaultConnectionLimit = 16
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+#One HttpClient for every request so connections are reused
+$handler = New-Object System.Net.Http.HttpClientHandler
 
 if ($Proxy)
 {
-	$IWRProxyConfig.Add("Proxy", $Proxy)
-}
-if ($ProxyCredential)
-{
-	$IWRProxyConfig.Add("ProxyCredential", $ProxyCredential)
-}
-if ($ProxyUseDefaultCredentials)
-{
-	$IWRProxyConfig.Add("ProxyUseDefaultCredentials", $true)
+	$webProxy = New-Object System.Net.WebProxy($Proxy)
+	if ($ProxyCredential)
+	{
+		$webProxy.Credentials = $ProxyCredential.GetNetworkCredential()
+	}
+	if ($ProxyUseDefaultCredentials)
+	{
+		$webProxy.UseDefaultCredentials = $true
+	}
+	$handler.Proxy = $webProxy
+	$handler.UseProxy = $true
 }
 
+$client = New-Object System.Net.Http.HttpClient($handler)
+$client.Timeout = [TimeSpan]::FromMinutes(10)
+$client.DefaultRequestHeaders.UserAgent.ParseAdd('Get-ZimmermanTools')
+
+#How many downloads to run at the same time
+$maxConcurrent = 6
 
 Write-Color -LinesBefore 1 "This script will discover and download all available programs" -BackgroundColor Blue
 Write-Color "from https://ericzimmerman.github.io and download them to $Dest" -BackgroundColor Blue -LinesAfter 1
@@ -309,308 +174,294 @@ Write-Color "A file will also be created in $Dest that tracks the signature of e
 Write-Color "so rerunning the script will only download new versions."
 Write-Color -LinesBefore 1 -Text "To redownload, remove lines from or delete the CSV file created under $Dest and rerun. Enjoy!"
 
-Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4 or 9). Default is 9. Use 0 to get all" -LinesAfter 1 -BackgroundColor Green
+Write-Color -LinesBefore 1 -Text "Use -NetVersion to control which version of the software you get (4 or 10). Default is 10. Use 0 to get all" -LinesAfter 1 -BackgroundColor Green
 
-$TestColor = (Get-Host).ui.rawui.ForegroundColor
-if ($TestColor -eq -1 -or $null -eq $TestColor)
+if ($NetVersion -eq 9)
 {
-	$defaultColor = [ConsoleColor]::Gray
+	#net 9 builds are no longer published. Treat 9 as 10 so existing scripts/shortcuts keep working
+	Write-Color -Text "* ", "-NetVersion 9 is no longer available. Using 10 instead" -Color Yellow
+	$NetVersion = 10
 }
-else
-{
-	$defaultColor = $TestColor
-}
-
-$newInstall = $false
 
 if (!(Test-Path -Path $Dest))
 {
-	Write-Color -Text "* ", "$Dest does not exist. Creating..." -Color Green, $defaultColor
+	Write-Color -Text "* ", "$Dest does not exist. Creating..." -Color Green
 	New-Item -ItemType directory -Path $Dest > $null
-	
-	$newInstall = $true
 }
+
+#.net methods resolve relative paths against the process directory, not the PowerShell location, so use the full path from here on
+$Dest = (Resolve-Path -LiteralPath $Dest).ProviderPath
+$netDest = Join-Path $Dest "net"
 
 $URL = "https://tools.ericzimmermanstools.com"
 
-$WebKeyCollection = @()
-
 $localDetailsFile = Join-Path $Dest -ChildPath "!!!RemoteFileDetails.csv"
+
+#Details from the last run, keyed by URL
+$localDetails = @{ }
 
 if (Test-Path -Path $localDetailsFile)
 {
-	Write-Color -Text "* ", "Loading local details from '$Dest'..." -Color Green, $defaultColor
-	$LocalKeyCollection = Import-Csv -Path $localDetailsFile
-}
-
-$toDownload = @()
-
-#Get zips
-$progressPreference = 'silentlyContinue'
-$PageContent = (Invoke-WebRequest @IWRProxyConfig -Uri $URL -UseBasicParsing).Content
-$progressPreference = 'Continue'
-
-$regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].(zip|txt)'
-$matchdetails = $regex.Match($PageContent)
-
-
-$uniqueUrlhash = @{ }
-
-
-Write-Color -Text "* ", "Getting available programs..." -Color Green, $defaultColor
-$progressPreference = 'silentlyContinue'
-while ($matchdetails.Success)
-{
-	$newUrl = $matchdetails.Value.Replace('https://f001.backblazeb2.com/file/EricZimmermanTools/', 'https://download.ericzimmermanstools.com/')
-	
-	if ($newUrl.EndsWith('kape.zip'))
+	Write-Color -Text "* ", "Loading local details from '$Dest'..." -Color Green
+	foreach ($row in Import-Csv -Path $localDetailsFile)
 	{
-		$matchdetails = $matchdetails.NextMatch()
-		continue
-	}
-	
-	if ($newUrl.EndsWith('All.zip'))
-	{
-		$matchdetails = $matchdetails.NextMatch()
-		continue
-	}
-		
-	if ($newUrl.EndsWith('All_9.zip'))
-	{
-		$matchdetails = $matchdetails.NextMatch()
-		continue
-	}
-	
-	if ($uniqueUrlhash.Contains($newUrl))
-	{
-		$matchdetails = $matchdetails.NextMatch()
-		continue
-	}
-	
-	#Write-Host $newUrl
-	
-	$uniqueUrlhash.Add($newUrl, $newUrl)
-		
-	$isnet9 = $false
-	
-	if ($NetVersion -eq 4)
-	{
-		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and $newUrl.Contains('/net9/'))
-		{
-			$matchdetails = $matchdetails.NextMatch()
-			continue
-		}
-	}
-	
-	if ($NetVersion -eq 9)
-	{
-		if (!$newUrl.EndsWith("Get-ZimmermanTools.zip") -and !$newUrl.Contains('/net9/'))
-		{
-			$matchdetails = $matchdetails.NextMatch()
-			continue
-		}
-	}
-	
-	$isnet9 = $newUrl.Contains('/net9/')
-	
-	#Write-Host $newUrl
-	
-	$headers = $null
-	try
-	{
-		$response = Invoke-WebRequest @IWRProxyConfig -Uri $newUrl -UseBasicParsing -Method Head -ErrorAction Stop
-		$headers = $response.Headers
-	}
-	catch
-	{
-		if ($_.Exception.Response -ne $null)
-		{
-			$statusCode = $_.Exception.Response.StatusCode.value__
-			Write-Color -Text "* ", "HTTP error $statusCode for URL: $newUrl" -Color Yellow, Red
-			continue
-		}
-		else
-		{
-			Write-Color -Text "* ", "Network or connection error for URL: $newUrl. Error: $_" -Color Yellow, Red
-			continue
-		}
-	}
-	
-	#Write-Host $headers
-	
-	#Check if net version is set and act accordingly
-	#https://f001.backblazeb2.com/file/EricZimmermanTools/AmcacheParser.zip
-	#https://f001.backblazeb2.com/file/EricZimmermanTools/net9/AmcacheParser_6.zip
-	
-	$newUrl = $matchdetails.Value.Replace('https://f001.backblazeb2.com/file/EricZimmermanTools', 'https://download.ericzimmermanstools.com/')
-	
-	#Write-Host 'THIS IS' + $newUrl
-	
-	$getUrl = $newUrl
-	#$sha = $headers["x-bz-content-sha1"]
-	$sha = $headers["ETag"]
-	#$name = $headers["x-bz-file-name"]
-	$name = ([uri]$getUrl).Segments[-1]
-	
-	if ($isnet9)
-	{
-		$name = Split-Path $name -leaf
-	}
-	
-	$size = $headers["Content-Length"]
-	
-	$details = @{
-		Name = [string]$name
-		SHA1 = [string]$sha
-		URL  = [string]$getUrl
-		Size = [string]$size
-		IsNet9 = [bool]$isnet9
-	}
-	
-	$webKeyCollection += New-Object PSObject -Property $details
-	
-	$matchdetails = $matchdetails.NextMatch()
-}
-$progressPreference = 'Continue'
-
-Foreach ($webKey in $webKeyCollection)
-{
-	if ($newInstall)
-	{
-		$toDownload += $webKey
-		continue
-	}
-	
-	$localFile = $LocalKeyCollection | Where-Object { $_.URL -eq $webKey.URL }
-	
-	if ($null -eq $localFile -or $localFile.SHA1 -ne $webKey.SHA1)
-	{
-		#Needs to be downloaded since SHA is different or it doesnt exist
-		$toDownload += $webKey
+		$localDetails[$row.URL] = $row
 	}
 }
 
-if ($toDownload.Count -eq 0)
+Write-Color -Text "* ", "Getting available programs..." -Color Green
+
+try
 {
-	Write-Color -LinesBefore 1 -Text "* ", "All files current. Exiting." -Color Green, Blue -LinesAfter 1
+	$PageContent = $client.GetStringAsync($URL).GetAwaiter().GetResult()
+}
+catch
+{
+	Write-Color -Text "* ", "Unable to get the list of programs from $URL ($($_.Exception.GetBaseException().Message))" -Color Red
+	$client.Dispose()
 	return
 }
 
+$regex = [regex] '(?i)\b(https)://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$].(zip|txt)'
 
+$seenUrls = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+$jobs = New-Object 'System.Collections.Generic.List[object]'
 
-$downloadedOK = @()
-
-$destFile = ""
-$name = ""
-
-$i = 0
-$dlCount = $toDownload.Count
-Write-Color -Text "* ", "Files to download: $dlCount" -Color Green, $defaultColor
-foreach ($td in $toDownload)
+foreach ($match in $regex.Matches($PageContent))
 {
-	$p = [math]::round(($i/$toDownload.Count) * 100, 2)
-	
-	#Write-Host ($td | Format-Table | Out-String)
-	
-	$tempDest = $Dest
-	
-	try
+	$newUrl = $match.Value
+
+	#KAPE and the 'all tools' zips are not wanted
+	if ($newUrl -match '/(kape|All|All_\d+)\.zip$')
 	{
-		$dUrl = $td.URL
-		$size = $td.Size -as [long]
-		$name = $td.Name
-		$is9 = $td.IsNet9
-		
-		if ($is9)
+		continue
+	}
+
+	if (!$seenUrls.Add($newUrl))
+	{
+		continue
+	}
+
+	#Check if net version is set and act accordingly
+	#https://download.ericzimmermanstools.com/AmcacheParser.zip
+	#https://download.ericzimmermanstools.com/net/AmcacheParser.zip
+	$isNet = $newUrl.Contains('/net/')
+
+	if (!$newUrl.EndsWith("Get-ZimmermanTools.zip"))
+	{
+		if (($NetVersion -eq 4 -and $isNet) -or ($NetVersion -eq 10 -and !$isNet))
 		{
-			$tempDest = Join-Path $tempDest "net9"
-			if (!(Test-Path -Path $tempDest))
+			continue
+		}
+	}
+
+	$jobs.Add([pscustomobject]@{
+			Url      = $newUrl
+			Name     = ([uri]$newUrl).Segments[-1]
+			IsNet    = $isNet
+			Dest     = $(if ($isNet) { $netDest } else { $Dest })
+			File     = $null
+			Stage    = $null
+			Task     = $null
+			Response = $null
+			Stream   = $null
+		})
+}
+
+$total = $jobs.Count
+Write-Color -Text "* ", "Checking $total programs for updates..." -Color Green
+
+#Each file is fetched with a conditional GET: if the ETag saved last run still matches, the server answers 304 with no body,
+#so unchanged files cost a single small request and changed files are downloaded in that same request
+$queue = New-Object 'System.Collections.Generic.Queue[object]' (, $jobs.ToArray())
+$active = New-Object 'System.Collections.Generic.List[object]'
+$currentDetails = New-Object 'System.Collections.Generic.List[object]'
+$done = 0
+$downloadCount = 0
+$errorCount = 0
+
+while ($queue.Count -gt 0 -or $active.Count -gt 0)
+{
+	while ($queue.Count -gt 0 -and $active.Count -lt $maxConcurrent)
+	{
+		$job = $queue.Dequeue()
+
+		$request = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Get, $job.Url)
+		$local = $localDetails[$job.Url]
+		if ($null -ne $local -and $local.SHA1)
+		{
+			[void]$request.Headers.TryAddWithoutValidation('If-None-Match', $local.SHA1)
+		}
+
+		$job.Task = $client.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead)
+		$job.Stage = 'Send'
+		$active.Add($job)
+	}
+
+	#@() on a List of objects fails on some PowerShell versions, so copy it with ToArray
+	$activeJobs = $active.ToArray()
+	$tasks = New-Object 'System.Threading.Tasks.Task[]' $activeJobs.Count
+	for ($i = 0; $i -lt $activeJobs.Count; $i++)
+	{
+		$tasks[$i] = $activeJobs[$i].Task
+	}
+	[void][System.Threading.Tasks.Task]::WaitAny($tasks, 500)
+
+	foreach ($job in $activeJobs)
+	{
+		if (!$job.Task.IsCompleted)
+		{
+			continue
+		}
+
+		$finished = $true
+
+		try
+		{
+			if ($job.Stage -eq 'Send')
 			{
-				Write-Color -Text "* ", "$tempDest does not exist. Creating..." -Color Green, $defaultColor
-				New-Item -ItemType directory -Path $tempDest > $null
+				$job.Response = $job.Task.GetAwaiter().GetResult()
+				$statusCode = [int]$job.Response.StatusCode
+
+				if ($statusCode -eq 304)
+				{
+					#Unchanged since the last run
+					$local = $localDetails[$job.Url]
+					$currentDetails.Add([pscustomobject]@{
+							Name  = [string]$local.Name
+							SHA1  = [string]$local.SHA1
+							URL   = [string]$job.Url
+							Size  = [string]$local.Size
+							IsNet = [bool]$job.IsNet
+						})
+				}
+				elseif ($job.Response.IsSuccessStatusCode)
+				{
+					if (!(Test-Path -Path $job.Dest))
+					{
+						Write-Color -Text "* ", "$($job.Dest) does not exist. Creating..." -Color Green
+						New-Item -ItemType directory -Path $job.Dest > $null
+					}
+
+					#Download to a unique name so files with the same name can never write over each other mid download
+					$job.File = [IO.Path]::Combine($job.Dest, "$($job.Name).$([guid]::NewGuid().ToString('N')).download")
+					$job.Stream = [IO.File]::Create($job.File)
+					$job.Task = $job.Response.Content.CopyToAsync($job.Stream)
+					$job.Stage = 'Copy'
+					$finished = $false
+				}
+				else
+				{
+					throw "HTTP error $statusCode"
+				}
+			}
+			else
+			{
+				[void]$job.Task.GetAwaiter().GetResult()
+				$job.Stream.Dispose()
+				$job.Stream = $null
+
+				if ($job.Name.EndsWith("zip"))
+				{
+					Expand-Zip -Path $job.File -Destination $job.Dest
+					Remove-Item -LiteralPath $job.File -Force
+				}
+				else
+				{
+					Move-Item -LiteralPath $job.File -Destination ([IO.Path]::Combine($job.Dest, $job.Name)) -Force
+				}
+
+				$etag = $job.Response.Headers.ETag
+				$size = $job.Response.Content.Headers.ContentLength
+
+				$currentDetails.Add([pscustomobject]@{
+						Name  = [string]$job.Name
+						SHA1  = $(if ($null -ne $etag) { $etag.ToString() } else { '' })
+						URL   = [string]$job.Url
+						Size  = [string]$size
+						IsNet = [bool]$job.IsNet
+					})
+
+				$extraInfo = ""
+				if ($job.IsNet)
+				{
+					$extraInfo = " (net 10)"
+				}
+
+				$sizeNice = '{0:N0}' -f $size
+
+				Write-Color -Text "* ", "Downloaded $($job.Name) (Size: $sizeNice)", $extraInfo -Color Green, Blue, Red
+				$downloadCount++
 			}
 		}
-		
-		Write-Progress -Activity "Updating programs...." -Status "$p% Complete" -PercentComplete $p -CurrentOperation "Downloading $name"
-		$destFile = [IO.Path]::Combine($tempDest, $name)
-		
-		$progressPreference = 'silentlyContinue'
-		Invoke-WebRequest @IWRProxyConfig -Uri $dUrl -OutFile $destFile -ErrorAction:Stop -UseBasicParsing
-		
-		$extraInfo = ""
-		if ($is9)
+		catch
 		{
-			$extraInfo = " (net 9)"
+			$errorCount++
+			Write-Color -Text "* ", "Error downloading $($job.Name) ($($_.Exception.GetBaseException().Message)). Wait for the run to finish and try again by repeating the command" -Color Green, Red
+
+			if ($null -ne $job.Stream)
+			{
+				$job.Stream.Dispose()
+				$job.Stream = $null
+			}
+			if ($null -ne $job.File -and (Test-Path -LiteralPath $job.File))
+			{
+				Remove-Item -LiteralPath $job.File -Force
+			}
 		}
-		
-		$sizeNice = '{0:N0}' -f $size
-		
-		Write-Color -Text "* ", "Downloaded $name (Size: $sizeNice)", $extraInfo -Color Green, Blue, Red
-		
-		if ($name.endswith("zip"))
+		finally
 		{
-			
-			Microsoft.PowerShell.Archive\Expand-Archive -Path $destFile -DestinationPath $tempDest -Force
+			if ($finished)
+			{
+				if ($null -ne $job.Response)
+				{
+					$job.Response.Dispose()
+				}
+				[void]$active.Remove($job)
+				$done++
+			}
 		}
-		
-		$downloadedOK += $td
 	}
-	catch
-	{
-		$ErrorMessage = $_.Exception.Message
-		Write-Color -Text "* ", "Error downloading $name ($ErrorMessage). Wait for the run to finish and try again by repeating the command" -Color Green, Red
-	}
-	finally
-	{
-		$progressPreference = 'Continue'
-		if ($name.endswith("zip") -and (Test-Path -Path $destFile))
-		{
-			remove-item -Path $destFile -Force
-		}
-		
-	}
-	$i += 1
+
+	Write-Progress -Activity "Updating programs...." -Status "$done of $total checked, $downloadCount downloaded" -PercentComplete (($done / [math]::Max($total, 1)) * 100)
 }
 
-#Write-Host ($webKeyCollection | Format-Table | Out-String)
+Write-Progress -Activity "Updating programs...." -Completed
+$client.Dispose()
 
-#Downloaded ok contains new stuff, but we need to account for existing stuff too
-foreach ($webItems in $webKeyCollection)
+if ($downloadCount -eq 0 -and $errorCount -eq 0)
 {
-	#Check what we have locally to see if it also contains what is in the web collection
-	$localFile = $LocalKeyCollection | Where-Object { $_.SHA1 -eq $webItems.SHA1 }
-	
-	#if its not null, we have a local file match against what is on the website, so its ok
-	
-	if ($null -ne $localFile)
-	{
-		#consider it downloaded since SHAs match
-		$downloadedOK += $webItems
-	}
+	Write-Color -LinesBefore 1 -Text "* ", "All files current." -Color Green, Blue
 }
 
-Write-Color -LinesBefore 1 -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green, $defaultColor -LinesAfter 1
+if ($NetVersion -ne 4 -and (Test-Path -Path (Join-Path $Dest "net9")))
+{
+	Write-Color -LinesBefore 1 -Text "* ", "net 10 programs are now saved to '$netDest'. '$(Join-Path $Dest "net9")' is no longer updated and can be deleted" -Color Yellow
+}
 
-$downloadedOK | export-csv -Path $localDetailsFile
+#Failed downloads are left out so they are retried on the next run
+Write-Color -LinesBefore 1 -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green -LinesAfter 1
+
+$currentDetails | Sort-Object -Property URL | Export-Csv -Path $localDetailsFile -NoTypeInformation
 
 #We need to sync the Maps for EvtxECmd and SQLECmd, and the batch files for RECmd
 #Reference: https://www.youtube.com/watch?v=mIb1GQP3ciE
 
 if ($Sync)
 {
-	Write-Color -Text "* ", "Sync switch detected! Syncing all ancillary files for EvtxECmd, SQLECmd, and RECmd..." -Color Green, $defaultColor
-	Write-Color -Text "* ", "Looking for any and all instances of EvtxECmd, RECmd, and SQLECmd in $Dest..." -Color Green, $defaultColor
+	Write-Color -Text "* ", "Sync switch detected! Syncing all ancillary files for EvtxECmd, SQLECmd, and RECmd..." -Color Green
+	Write-Color -Text "* ", "Looking for any and all instances of EvtxECmd, RECmd, and SQLECmd in $Dest..." -Color Green
 	Get-ChildItem -Path $Dest -Filter "*ecmd.exe" -Recurse | Where-Object { $_.Name -in "evtxecmd.exe", "sqlecmd.exe", "recmd.exe" } | ForEach-Object {
 		Write-Host "Running: $($_.FullName)"
 		try
 		{
-			
-			Write-Color -Text "* ", "Syncing $($_.FullName)..." -Color Green, $defaultColor
+
+			Write-Color -Text "* ", "Syncing $($_.FullName)..." -Color Green
 			& $_.FullName --sync
 		}
 		catch
 		{
-			Write-Color -Text "* ", "Error syncing $($_.FullName)" -Color Red, $defaultColor
+			Write-Color -Text "* ", "Error syncing $($_.FullName)" -Color Red
 		}
 	}
 }
