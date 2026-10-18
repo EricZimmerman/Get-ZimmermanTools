@@ -247,6 +247,14 @@ function Get-ReleaseFile([string]$program, [string]$framework, [string]$pattern,
 $msbuildBuilt = @{}
 
 # Builds the program for a framework; returns the folder with its output
+# Runs a helper script: its messages (Write-Host: "Copied 7 plugins to ...") indented under the program's line, its
+# other output (the build's) dropped
+function Invoke-Indented([scriptblock]$block) {
+    & $block 6>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.InformationRecord]) { Write-Host "   $($_.MessageData)" -ForegroundColor DarkGray }
+    }
+}
+
 function Build-Program($p, $fw, [string]$buildDir) {
     $project = Join-Path $Root $p.Project
     if (Test-NeedsMSBuild $project $fw) {
@@ -371,7 +379,7 @@ function Invoke-Stage {
 
         $asm = Get-AssemblyName $project
         foreach ($fw in Get-Frameworks $project) {
-            Write-Host "== $($p.Name) $($fw.Name)" -ForegroundColor Cyan
+            Write-Host "== $($p.Name) $($fw.Name)" -ForegroundColor Red
             $buildDir = Join-Path $buildRoot "$($p.Name)\$($fw.Name)"
             $stage = Join-Path $Out "$($p.Name)\$($fw.Name)"
             $target = if ($p.Folder) { Join-Path $stage $p.Folder } else { $stage }
@@ -413,7 +421,7 @@ function Invoke-Stage {
                 switch ($p.Special) {
                     'RegistryPlugins' {
                         if (-not $registryPlugins) {
-                            & (Join-Path $Root 'RegistryPlugins\CopyPlugins.ps1') -Out (Join-Path $buildRoot 'RegistryPlugins') -Build | Out-Null
+                            Invoke-Indented { & (Join-Path $Root 'RegistryPlugins\CopyPlugins.ps1') -Out (Join-Path $buildRoot 'RegistryPlugins') -Build }
                             $registryPlugins = Join-Path $buildRoot 'RegistryPlugins'
                         }
                         Copy-Into $registryPlugins (Join-Path $target 'Plugins')
@@ -421,7 +429,7 @@ function Invoke-Stage {
                     'TlePlugins' {
                         if (-not $tlePlugins) {
                             $tlePlugins = Join-Path $buildRoot 'TLEFilePlugins'
-                            & (Join-Path $Root 'tlefileplugins\CopyPlugins.ps1') -Out (Join-Path $tlePlugins 'Plugins') -Layouts (Join-Path $tlePlugins 'Layouts') -Build | Out-Null
+                            Invoke-Indented { & (Join-Path $Root 'tlefileplugins\CopyPlugins.ps1') -Out (Join-Path $tlePlugins 'Plugins') -Layouts (Join-Path $tlePlugins 'Layouts') -Build }
                         }
                         Copy-Into (Join-Path $tlePlugins 'Plugins') (Join-Path $target 'Plugins')
                         Copy-Into (Join-Path $tlePlugins 'Layouts') (Join-Path $target 'Layouts')
