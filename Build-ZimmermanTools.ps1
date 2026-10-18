@@ -137,7 +137,7 @@ $programs = @(
     @{ Name = 'SQLECmd'; Project = 'SQLECmd\SQLECmd\SQLECmd.csproj'; Folder = 'SQLECmd'; Copy = @{ 'SQLECmd\SQLMap\Maps' = 'Maps' } }
     @{ Name = 'SrumECmd'; Project = 'srum\SrumECmd\SrumECmd.csproj' }
     @{ Name = 'SumECmd'; Project = 'sum\SumECmd\SumECmd.csproj' }
-    @{ Name = 'VSCMount'; Project = 'vscmount\VSCMount\VSCMount.csproj'; Files = @('WmiLight.Native.dll') }
+    @{ Name = 'VSCMount'; Project = 'vscmount\VSCMount\VSCMount.csproj' }
     @{ Name = 'WxTCmd'; Project = 'WxTCmd\WxTCmd\WxTCmd.csproj' }
 
     @{ Name = 'EZViewer'; Project = 'EZViewer\EZViewer\EZViewer.csproj'; Folder = 'EZViewer'; Gui = $true; Files = @('Extensions.yaml'); Release = @('LICENSE.txt') }
