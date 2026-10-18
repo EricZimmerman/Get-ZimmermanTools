@@ -40,7 +40,12 @@
     cloned next to it).
 
 .PARAMETER Only
-    Build only these programs (names as in the zips: RECmd, TimelineExplorer, ...). Also --only a,b.
+    Build only these programs, comma separated (names as in the zips: LECmd,MFTECmd,TimelineExplorer, ...). Also -Tool,
+    --only a,b and --tool a,b.
+
+.PARAMETER Clear
+    Delete everything in the -Out folder first (staged programs, the _build folder and the cached release zips), so
+    nothing is left from an earlier run. Also --clear.
 
 .PARAMETER Zip
     Make the download zips in this folder (<Zip>\X.zip for .NET Framework, <Zip>\net\X.zip for .NET 10). Also --zip.
@@ -67,13 +72,16 @@
     .\Build-ZimmermanTools.ps1 --staged D:\Release --zip \\server\share
     .\Build-ZimmermanTools.ps1 --out D:\Release --sign --zip \\server\share
     .\Build-ZimmermanTools.ps1 -Out D:\Release -Only RECmd,TimelineExplorer
+    .\Build-ZimmermanTools.ps1 -Out D:\Release -Clear -Tool LECmd,MFTECmd
 #>
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [string] $Out,
     [string] $Sign,
     [string] $Root = (Split-Path $PSScriptRoot -Parent),
+    [Alias('Tool')]
     [string[]] $Only,
+    [switch] $Clear,
     [string] $Zip,
     [string] $Staged,
     [string] $CertFile,
@@ -86,7 +94,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# --out x / --sign x / --only a,b / --zip / --force / --certfile x (GNU style)
+# --out x / --sign x / --only a,b (--tool a,b) / --clear / --zip / --force / --certfile x (GNU style)
 for ($i = 0; $i -lt $Rest.Count; $i++) {
     switch -Regex ($Rest[$i]) {
         '^--?out$' { $Out = $Rest[++$i] }
@@ -94,14 +102,15 @@ for ($i = 0; $i -lt $Rest.Count; $i++) {
             if ($i + 1 -lt $Rest.Count -and $Rest[$i + 1] -notmatch '^--?\w') { $Sign = $Rest[++$i] } else { $Sign = '<out>' }
         }
         #(PowerShell passes a,b as an array, which arrives joined with spaces)
-        '^--?only$' { $Only = $Rest[++$i] -split '[,\s]+' | Where-Object { $_ } }
+        '^--?(only|tool)$' { $Only = $Rest[++$i] -split '[,\s]+' | Where-Object { $_ } }
+        '^--?clear$' { $Clear = $true }
         '^--?zip$' { $Zip = $Rest[++$i] }
         '^--?staged$' { $Staged = $Rest[++$i] }
         '^--?force$' { $Force = $true }
         '^--?certfile$' { $CertFile = $Rest[++$i] }
         '^--?signtool$' { $SignTool = $Rest[++$i] }
         '^--?root$' { $Root = $Rest[++$i] }
-        default { throw "Unknown argument '$($Rest[$i])'. Use --out <dir>, --sign [<dir>], --zip <dir>, --staged <dir>, --only a,b, --certfile <pfx>, --force" }
+        default { throw "Unknown argument '$($Rest[$i])'. Use --out <dir>, --clear, --tool a,b, --sign [<dir>], --zip <dir>, --staged <dir>, --certfile <pfx>, --force" }
     }
 }
 
@@ -112,6 +121,29 @@ if ($Sign -eq '<out>') {
     $Sign = if ($Out) { $Out } elseif ($Staged) { $Staged } else { throw "--sign without a folder needs --out or --staged" }
 }
 if ($Zip -and -not $Out -and -not $Staged) { throw "--zip needs the staged folder: --out (build first) or --staged" }
+
+#("LECmd,MFTECmd" in quotes arrives as one name)
+if ($Only) { $Only = @($Only -split '[,\s]+' | Where-Object { $_ }) }
+
+if ($Clear) {
+    if (-not $Out) { throw "--clear needs --out (the folder to empty)" }
+    $outFull = [IO.Path]::GetFullPath($Out).TrimEnd('\')
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\')
+
+    # never a drive, a folder with the repositories (or above them), a repository, or a profile or system folder
+    $refuse = $outFull -eq [IO.Path]::GetPathRoot($outFull).TrimEnd('\') -or
+        "$rootFull\".StartsWith("$outFull\", [StringComparison]::OrdinalIgnoreCase) -or
+        (Test-Path -LiteralPath (Join-Path $outFull '.git')) -or
+        [bool](@($env:USERPROFILE, $env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}, [Environment]::GetFolderPath('Desktop'),
+            [Environment]::GetFolderPath('MyDocuments')) | Where-Object { $_ -and $_.TrimEnd('\') -ieq $outFull })
+    if ($refuse) { throw "--clear will not empty '$outFull' (a drive, a repository, the folder with the repositories or a system folder)" }
+
+    if (Test-Path -LiteralPath $outFull) {
+        $items = @(Get-ChildItem -LiteralPath $outFull -Force)
+        Write-Host "Clearing $outFull ($($items.Count) item(s))" -ForegroundColor Yellow
+        $items | Remove-Item -Recurse -Force
+    }
+}
 
 # ---------------------------------------------------------------------------------------------------------------------
 # What each download zip has. Project: under -Root. Folder: the folder in the zip ($null: the files at the top).
