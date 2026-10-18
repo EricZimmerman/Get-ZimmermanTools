@@ -117,10 +117,11 @@ if ($Zip -and -not $Out -and -not $Staged) { throw "--zip needs the staged folde
 # What each download zip has. Project: under -Root. Folder: the folder in the zip ($null: the files at the top).
 # Files: what is taken from the build output ({0} is the assembly name) besides the defaults (net4: {0}.exe;
 # others: {0}.exe, {0}.dll, {0}.runtimeconfig.json). Copy: repository folders/files -> paths in the staged program.
-# Release: files only in the release zips. Special: steps for plugins and layouts.
+# Release: files only in the release zips. Special: steps for plugins and layouts. SingleFile: published as one exe
+# (framework dependent, win-x64, native libraries inside: the tools with SQLite, which have no Costura).
 # ---------------------------------------------------------------------------------------------------------------------
 $programs = @(
-    @{ Name = 'AmcacheParser'; Project = 'AmcacheParser\AmcacheParser\AmcacheParser.csproj' }
+    @{ Name = 'AmcacheParser'; Project = 'AmcacheParser\AmcacheParser\AmcacheParser.csproj'; SingleFile = $true }
     @{ Name = 'AppCompatCacheParser'; Project = 'AppCompatCacheParser\AppCompatCacheParser\AppCompatCacheParser.csproj' }
     @{ Name = 'bstrings'; Project = 'bstrings\bstrings\bstrings.csproj' }
     @{ Name = 'EvtxECmd'; Project = 'evtx\EvtxECmd\EvtxECmd.csproj'; Folder = 'EvtxeCmd'; Copy = @{ 'evtx\evtx\Maps' = 'Maps' } }
@@ -138,7 +139,7 @@ $programs = @(
     @{ Name = 'SrumECmd'; Project = 'srum\SrumECmd\SrumECmd.csproj' }
     @{ Name = 'SumECmd'; Project = 'sum\SumECmd\SumECmd.csproj' }
     @{ Name = 'VSCMount'; Project = 'vscmount\VSCMount\VSCMount.csproj' }
-    @{ Name = 'WxTCmd'; Project = 'WxTCmd\WxTCmd\WxTCmd.csproj' }
+    @{ Name = 'WxTCmd'; Project = 'WxTCmd\WxTCmd\WxTCmd.csproj'; SingleFile = $true }
 
     @{ Name = 'EZViewer'; Project = 'EZViewer\EZViewer\EZViewer.csproj'; Folder = 'EZViewer'; Gui = $true; Files = @('Extensions.yaml'); Release = @('LICENSE.txt') }
     @{ Name = 'Hasher'; Project = 'Hasher\Hasher2\Hasher2.vbproj'; Folder = 'Hasher'; Gui = $true; Release = @('LICENSE.txt'); ZipName = 'hasher' }
@@ -280,6 +281,13 @@ function Build-Program($p, $fw, [string]$buildDir) {
         return $outputDir
     }
 
+    if ($p.SingleFile) {
+        # one exe with the dependencies and native libraries (SQLite) inside, as the project's CLAUDE.md releases it
+        $output = & dotnet publish $project -c Release -f $fw.Tfm -r win-x64 --self-contained false -p:PublishSingleFile=true -o $buildDir --nologo -v quiet 2>&1
+        if ($LASTEXITCODE -ne 0) { Show-BuildErrors $output; throw "the publish failed" }
+        return $buildDir
+    }
+
     # a full build: Fody (Costura) only weaves when the compiler runs, so an up-to-date obj left from a build without
     # weaving was copied as is (a 2 MB RegistryExplorer.dll instead of 94 MB with its dependencies)
     $output = & dotnet build $project -c Release -f $fw.Tfm -o $buildDir --no-incremental --nologo -v quiet 2>&1
@@ -297,15 +305,22 @@ function Test-NeedsMSBuild([string]$project, $fw) {
     return [bool]$licx -and $text -notmatch "MSBuildRuntimeType"
 }
 
-function Test-CosturaEmbedded([string]$assembly) {
+# The dlls Costura embedded in an assembly (lower case names), read from its metadata (any framework)
+function Get-CosturaEmbedded([string]$assembly) {
+    $names = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $fs = [IO.File]::OpenRead($assembly)
     try {
-        $asm = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($assembly))
-        return [bool]($asm.GetManifestResourceNames() | Where-Object { $_ -like 'costura.*' })
+        $pe = [System.Reflection.PortableExecutable.PEReader]::new($fs)
+        if ($pe.HasMetadata) {
+            $md = [System.Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($pe)
+            foreach ($h in $md.ManifestResources) {
+                $n = $md.GetString($md.GetManifestResource($h).Name)
+                if ($n -match '^costura\.(.+?\.dll)(\.compressed)?$') { [void]$names.Add($Matches[1]) }
+            }
+        }
     }
-    catch {
-        # can't be loaded here (another runtime): not checked
-        return $true
-    }
+    finally { $fs.Dispose() }
+    return ,$names
 }
 
 function Show-BuildErrors($output) {
@@ -367,7 +382,7 @@ function Invoke-Stage {
                 $buildDir = Build-Program $p $fw $buildDir
                 New-Item -ItemType Directory -Force $target | Out-Null
 
-                $files = if ($fw.Name -eq 'net4') { @('{0}.exe') } else { @('{0}.exe', '{0}.dll', '{0}.runtimeconfig.json') }
+                $files = if ($fw.Name -eq 'net4' -or $p.SingleFile) { @('{0}.exe') } else { @('{0}.exe', '{0}.dll', '{0}.runtimeconfig.json') }
                 $files += @($p.Files)
                 foreach ($f in $files | Where-Object { $_ }) {
                     $name = $f -f $asm
@@ -413,15 +428,24 @@ function Invoke-Stage {
                     }
                 }
 
-                # a program that uses Costura must have its dependencies embedded (the staged folder has only its own files)
-                if ((Get-Content -LiteralPath $project -Raw) -match 'Costura\.Fody') {
-                    $main = Join-Path $target ($(if ($fw.Name -eq 'net4') { '{0}.exe' } else { '{0}.dll' }) -f $asm)
-                    if (-not (Test-CosturaEmbedded $main)) { throw "$(Split-Path $main -Leaf) has no embedded dependencies (Costura did not run)" }
+                # every dll the build made must be in the program: staged next to it, or embedded by Costura (a build
+                # without either can't run: the dependencies would be missing)
+                $embedded = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+                $main = Join-Path $target ($(if ($fw.Name -eq 'net4' -or $p.SingleFile) { '{0}.exe' } else { '{0}.dll' }) -f $asm)
+                if (Test-Path -LiteralPath $main) { $embedded.UnionWith((Get-CosturaEmbedded $main)) }
+                if ((Get-Content -LiteralPath $project -Raw) -match 'Costura\.Fody' -and $embedded.Count -eq 0) {
+                    throw "$(Split-Path $main -Leaf) has no embedded dependencies (Costura did not run)"
                 }
 
-                # dlls the build left next to the program and the zip doesn't have (not embedded by Costura?)
-                $extra = Get-ChildItem $buildDir -Filter *.dll -File | Where-Object { -not (Test-Path (Join-Path $target $_.Name)) }
-                $note = if ($extra) { "staged; build output also has $($extra.Count) other dll(s): $(($extra.Name | Select-Object -First 4) -join ', ')" } else { 'staged' }
+                #(staged anywhere in the program: Timeline Explorer's plugins are in Plugins)
+                $stagedNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+                Get-ChildItem -LiteralPath $stage -Recurse -File -Filter *.dll | ForEach-Object { [void]$stagedNames.Add($_.Name) }
+                $missing = @(Get-ChildItem $buildDir -Filter *.dll -File | Where-Object {
+                    -not $stagedNames.Contains($_.Name) -and -not $embedded.Contains($_.Name) })
+                if ($missing) {
+                    throw "$($missing.Count) dll(s) of the build are neither embedded nor staged: $(($missing.Name | Select-Object -First 4) -join ', ')"
+                }
+                $note = if ($p.SingleFile) { 'staged (single file)' } else { 'staged' }
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = $note })
             }
             catch {
