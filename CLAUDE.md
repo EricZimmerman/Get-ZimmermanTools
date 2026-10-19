@@ -16,6 +16,7 @@ Two PowerShell scripts:
 - **Builds**: `dotnet build -f <tfm> -o _build\<Program>\<fw> --no-incremental` (full builds: an incremental build skipped Costura weaving once). Visual Studio's MSBuild only for old-style projects or a `licenses.licx` embedded for any MSBuild; MSBuild 18 ends with 0x4000001E when given `OutDir`/`TargetFramework` or with dotnet build server nodes left, so the script restores and builds separately and shuts the nodes down.
 - **Checks**: every dll the build made must be staged (anywhere in the program) or embedded by Costura (read from the assembly's metadata); a Costura program with nothing embedded fails. Failures are listed in the summary table and set the exit code.
 - **Signing**: `signtool sign /fd sha256 /tr <timestamp> /td sha256` (`/a`, or `/f` with `-CertFile`), many files per call so a token asks once per call; files already validly signed are skipped unless `-Force`. Never run signing on a machine without the user asking: `/a` picks the user's real certificate.
+- **Zips** (`--zip`): made locally, copied next to the destination zip as `<name>.zip.partial-<guid>`, then renamed over it (one step, also on a share): a download meanwhile gets the whole old zip. Nothing is deleted at the destination (an old `net9\` folder or a zip no longer made stays).
 - Output: each program's `== Program fw` line in red, helper scripts' messages indented under it, then a summary table.
 
 ## Testing

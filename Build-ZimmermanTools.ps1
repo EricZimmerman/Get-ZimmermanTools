@@ -615,8 +615,18 @@ function Invoke-Zip([string]$staged, [string]$dest) {
             # made locally, then copied (the destination can be a share)
             $tmp = Join-Path ([IO.Path]::GetTempPath()) "$zipName-$($fwDir.Name)-$([guid]::NewGuid().ToString('N')).zip"
             [IO.Compression.ZipFile]::CreateFromDirectory($fwDir.FullName, $tmp, [IO.Compression.CompressionLevel]::Optimal, $false)
-            Copy-Item -LiteralPath $tmp -Destination $zipFile -Force
-            Remove-Item -LiteralPath $tmp -Force
+
+            # copied next to the zip under another name, then renamed over it: a download while it is copied gets the
+            # whole old zip, never part of the new one (a rename in the same folder replaces the file in one step)
+            $partial = "$zipFile.partial-$([guid]::NewGuid().ToString('N'))"
+            try {
+                Copy-Item -LiteralPath $tmp -Destination $partial -Force
+                [IO.File]::Move($partial, $zipFile, $true)
+            }
+            finally {
+                if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+                Remove-Item -LiteralPath $tmp -Force
+            }
             Write-Host "  $zipFile"
             $count++
         }
