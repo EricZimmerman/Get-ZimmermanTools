@@ -411,7 +411,8 @@ function Invoke-Stage {
 
         $asm = Get-AssemblyName $project
         foreach ($fw in Get-Frameworks $project) {
-            Write-Host "== $($p.Name) $($fw.Name)" -ForegroundColor Red
+            Write-Host '== ' -ForegroundColor Red -NoNewline
+            Write-Host "$($p.Name) $($fw.Name)" -ForegroundColor Green
             $buildDir = Join-Path $buildRoot "$($p.Name)\$($fw.Name)"
             $stage = Join-Path $Out "$($p.Name)\$($fw.Name)"
             $target = if ($p.Folder) { Join-Path $stage $p.Folder } else { $stage }
