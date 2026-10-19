@@ -10,6 +10,9 @@
       - EvtxECmd, SQLECmd: their Maps; RECmd: BatchExamples and the registry plugins (Plugins)
       - Registry Explorer: the registry plugins, the bookmarks (RegistryExplorerBookmarks\Common), the manual
       - Timeline Explorer: the plugin DLLs (Plugins) and the layouts (Layouts\Default) from TLEFilePlugins
+      - Maps, batch files, bookmarks, the manual and the layouts are taken as committed (HEAD), byte for byte what
+        GitHub has (and what --sync downloads), not from the working copy (CRLF on Windows); uncommitted changes in
+        them are left out with a warning
       - Files that are not in any repository (the GUIs' LICENSE.txt, iisGeolocate's GeoLite2-City.mmdb, Registry
         Explorer's default Settings, XWFIM's text files) are taken from the current release zips, downloaded once
         (from the page Get-ZimmermanTools.ps1 reads) into %TEMP%\Build-ZimmermanTools\_release
@@ -423,10 +426,36 @@ function Copy-Into([string]$source, [string]$dest) {
     }
 }
 
+# A repository's folder or file (<repo>\<path>, under -Root) as committed at HEAD, byte for byte what GitHub has: the
+# Windows working copy has CRLF where git stores LF (core.autocrlf), and --sync (EvtxECmd, SQLECmd, RECmd), which
+# downloads master from GitHub, compares bytes, so every map looked updated. Uncommitted changes are left out (a
+# warning). Returns where the export is
+function Export-RepoPath([string]$relative) {
+    $parts = $relative -split '[\\/]', 2
+    $repo = Join-Path $Root $parts[0]
+    $path = $parts[1] -replace '\\', '/'
+    if (@(git -C $repo status --porcelain -- $path)) {
+        Write-Warning "$relative has uncommitted changes: not staged (the committed files are)"
+    }
+    $dir = Join-Path $Work "_export\$([guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    #(no conversion: core.autocrlf would give the working copy's CRLF again)
+    git -C $repo -c core.autocrlf=false -c core.eol=lf archive --format=zip -o "$dir.zip" HEAD -- $path
+    if ($LASTEXITCODE -ne 0) { throw "git archive of $relative failed" }
+    [IO.Compression.ZipFile]::ExtractToDirectory("$dir.zip", $dir)
+    Remove-Item -LiteralPath "$dir.zip"
+    $result = Join-Path $dir ($path -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $result)) { throw "$relative is not committed in $(Split-Path $repo -Leaf)" }
+    Write-Note "$relative as committed ($(Split-Path $repo -Leaf) $(git -C $repo rev-parse --short HEAD))"
+    return $result
+}
+
 function Invoke-Stage {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
     $Out = [IO.Path]::GetFullPath($Out)
     New-Item -ItemType Directory -Force $Out | Out-Null
     $buildRoot = Join-Path $Work '_build'
+    if (Test-Path -LiteralPath (Join-Path $Work '_export')) { Remove-Item -LiteralPath (Join-Path $Work '_export') -Recurse -Force }
     # left in -Out by earlier versions of this script
     foreach ($old in '_build', '_release') {
         $oldDir = Join-Path $Out $old
@@ -506,7 +535,7 @@ function Invoke-Stage {
                 }
 
                 foreach ($k in @($p.Copy.Keys)) {
-                    if ($k) { Copy-Into (Join-Path $Root $k) (Join-Path $target $p.Copy[$k]) }
+                    if ($k) { Copy-Into (Export-RepoPath $k) (Join-Path $target $p.Copy[$k]) }
                 }
 
                 foreach ($d in @($p.EmptyDirs)) {
@@ -535,7 +564,10 @@ function Invoke-Stage {
                     'TlePlugins' {
                         if (-not $tlePlugins) {
                             $tlePlugins = Join-Path $buildRoot 'TLEFilePlugins'
-                            Invoke-Indented { & (Join-Path $Root 'tlefileplugins\CopyPlugins.ps1') -Out (Join-Path $tlePlugins 'Plugins') -Layouts (Join-Path $tlePlugins 'Layouts') -Build }
+                            Invoke-Indented { & (Join-Path $Root 'tlefileplugins\CopyPlugins.ps1') -Out (Join-Path $tlePlugins 'Plugins') -Build }
+                            # the layouts as committed (CopyPlugins -Layouts copies the working copy's)
+                            Copy-Into (Export-RepoPath 'tlefileplugins\Layouts\Default') (Join-Path $tlePlugins 'Layouts\Default')
+                            Copy-Into (Export-RepoPath 'tlefileplugins\Layouts\!!README.txt') (Join-Path $tlePlugins 'Layouts\!!README.txt')
                         }
                         Copy-Into (Join-Path $tlePlugins 'Plugins') (Join-Path $target 'Plugins')
                         Copy-Into (Join-Path $tlePlugins 'Layouts') (Join-Path $target 'Layouts')
