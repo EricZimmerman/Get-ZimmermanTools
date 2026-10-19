@@ -239,11 +239,17 @@ function Get-AssemblyName([string]$project) {
 }
 
 # The current release zips (for the files no repository has), downloaded once
+# A note under the program's line (what is downloaded, copied, ...)
+function Write-Note([string]$text) {
+    Write-Host "   $text" -ForegroundColor DarkGray
+}
+
 $releaseCache = $null
 function Get-ReleaseFile([string]$program, [string]$framework, [string]$pattern, [string]$folder) {
     if (-not $script:releaseCache) {
         $script:releaseCache = Join-Path $Out '_release'
         New-Item -ItemType Directory -Force $script:releaseCache | Out-Null
+        Write-Note "Downloading the download page https://tools.ericzimmermanstools.com (the current release zips' URLs: files no repository has come from them)"
         $page = (Invoke-WebRequest -Uri 'https://tools.ericzimmermanstools.com' -UseBasicParsing).Content
         $regex = [regex] '(?i)\bhttps://[-A-Z0-9+&@#/%?=~_|$!:,.;]*[A-Z0-9+&@#/%=~_|$]\.zip'
         $script:releaseUrls = $regex.Matches($page) | ForEach-Object Value | Sort-Object -Unique
@@ -258,7 +264,14 @@ function Get-ReleaseFile([string]$program, [string]$framework, [string]$pattern,
     if (-not $url) { Write-Warning "${program}: no release zip to take '$pattern' from"; return @() }
 
     $zipFile = Join-Path $script:releaseCache (($url -replace '^https://[^/]+/', '') -replace '/', '_')
-    if (-not (Test-Path $zipFile)) { Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing }
+    if (-not (Test-Path $zipFile)) {
+        Write-Note "Downloading the release zip $url (for $pattern)"
+        Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing
+        Write-Note ("   {0:N1} MB saved as {1}" -f ((Get-Item -LiteralPath $zipFile).Length / 1MB), $zipFile)
+    }
+    else {
+        Write-Note "Taking $pattern from the release zip already downloaded: $zipFile"
+    }
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($zipFile)
@@ -283,7 +296,7 @@ $msbuildBuilt = @{}
 # other output (the build's) dropped
 function Invoke-Indented([scriptblock]$block) {
     & $block 6>&1 | ForEach-Object {
-        if ($_ -is [System.Management.Automation.InformationRecord]) { Write-Host "   $($_.MessageData)" -ForegroundColor DarkGray }
+        if ($_ -is [System.Management.Automation.InformationRecord]) { Write-Note $_.MessageData }
     }
 }
 
