@@ -513,13 +513,38 @@ function Invoke-Stage {
     if ($results | Where-Object { $_.Result -like 'FAILED*' -or $_.Result -like 'no project*' }) { $script:failed = $true }
 }
 
+# The files whose Authenticode signature is not valid (each file is read in full and its certificate chain checked:
+# about 10 s for a full release; several at a time in PowerShell 7)
+function Get-UnsignedFiles($files, [string]$activity) {
+    $files = @($files)
+    if ($files.Count -eq 0) { return @() }
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        $paths = $files.FullName | ForEach-Object -ThrottleLimit 8 -Parallel {
+            if ((Get-AuthenticodeSignature -LiteralPath $_).Status -ne 'Valid') { $_ }
+        }
+        return @($files | Where-Object { $paths -contains $_.FullName })
+    }
+    $i = 0
+    $result = foreach ($f in $files) {
+        Write-Progress -Activity $activity -Status $f.Name -PercentComplete (100 * $i++ / $files.Count)
+        if ((Get-AuthenticodeSignature -LiteralPath $f.FullName).Status -ne 'Valid') { $f }
+    }
+    Write-Progress -Activity $activity -Completed
+    return @($result)
+}
+
 function Invoke-Sign([string]$dir) {
     $dir = [IO.Path]::GetFullPath($dir)
-    $files = Get-ChildItem -LiteralPath $dir -Recurse -File -Include *.exe, *.dll |
-        Where-Object { $_.FullName -notmatch '\\_(build|release|zips)\\' }
+    Write-Host "Finding the .exe and .dll files in $dir"
+    $files = @(Get-ChildItem -LiteralPath $dir -Recurse -File -Include *.exe, *.dll |
+        Where-Object { $_.FullName -notmatch '\\_(build|release|zips)\\' })
+    $total = $files.Count
+    Write-Note ("{0:N0} file(s), {1:N0} MB" -f $total, (($files | Measure-Object Length -Sum).Sum / 1MB))
 
-    if (-not $Force) {
-        $files = $files | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' }
+    if (-not $Force -and $total -gt 0) {
+        Write-Note "Checking their signatures (files already validly signed, such as DevExpress' and Microsoft's, are skipped; --force signs them too)"
+        $files = Get-UnsignedFiles $files 'Checking signatures'
+        Write-Note ("{0:N0} to sign, {1:N0} already signed" -f $files.Count, ($total - $files.Count))
     }
     $files = @($files)
     if ($files.Count -eq 0) { Write-Host "Nothing to sign in $dir"; return }
@@ -538,29 +563,35 @@ function Invoke-Sign([string]$dir) {
 
     Write-Host "Signing $($files.Count) file(s) in $dir with $signtool"
 
-    # as many files per call as the command line takes (a token asks for its password once per call)
-    $batch = New-Object System.Collections.Generic.List[string]
+    # the files of each call (a token asks for its password once per call): as many as the command line takes (32,767 characters for an exe; a .cmd or .bat wrapper
+    # goes through cmd.exe: 8,191)
+    $max = if ($signtool -match '\.(cmd|bat)$') { 7000 } else { 28000 }
+    $batches = New-Object System.Collections.Generic.List[object]
+    $current = New-Object System.Collections.Generic.List[string]
     $length = 0
-    $failed = 0
-    $flush = {
-        if ($batch.Count -eq 0) { return }
-        & $signtool @base @batch
-        if ($LASTEXITCODE -ne 0) { $script:signFailed = $true }
-        $batch.Clear()
-        $script:length = 0
-    }
     foreach ($f in $files) {
-        if ($length + $f.FullName.Length + 3 -gt 28000) { & $flush; $length = 0 }
-        $batch.Add($f.FullName)
+        if ($current.Count -gt 0 -and $length + $f.FullName.Length + 3 -gt $max) {
+            $batches.Add($current); $current = New-Object System.Collections.Generic.List[string]; $length = 0
+        }
+        $current.Add($f.FullName)
         $length += $f.FullName.Length + 3
     }
-    & $flush
+    if ($current.Count -gt 0) { $batches.Add($current) }
+
+    for ($b = 0; $b -lt $batches.Count; $b++) {
+        Write-Note ("Signing batch {0} of {1} ({2:N0} files){3}" -f ($b + 1), $batches.Count, $batches[$b].Count,
+            $(if (-not $CertFile) { ': a token asks for its password now' } else { '' }))
+        & $signtool @base @($batches[$b])
+        if ($LASTEXITCODE -ne 0) { $script:signFailed = $true }
+    }
     $plain = $null
 
-    $bad = $files | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' }
+    Write-Host "Verifying the signatures"
+    $bad = @(Get-UnsignedFiles $files 'Verifying signatures')
     if ($bad) {
-        Write-Host "Not signed (or not valid):" -ForegroundColor Red
-        $bad | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
+        Write-Host ("Not signed (or not valid): {0:N0} of {1:N0} file(s)" -f $bad.Count, $files.Count) -ForegroundColor Red
+        $bad | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
+        if ($bad.Count -gt 20) { Write-Host "  ... and $($bad.Count - 20) more" -ForegroundColor Red }
         $script:failed = $true
     }
     else {
