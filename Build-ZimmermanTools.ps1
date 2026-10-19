@@ -12,12 +12,19 @@
       - Timeline Explorer: the plugin DLLs (Plugins) and the layouts (Layouts\Default) from TLEFilePlugins
       - Files that are not in any repository (the GUIs' LICENSE.txt, iisGeolocate's GeoLite2-City.mmdb, Registry
         Explorer's default Settings, XWFIM's text files) are taken from the current release zips, downloaded once
-        (from the page Get-ZimmermanTools.ps1 reads) into <Out>\_release
+        (from the page Get-ZimmermanTools.ps1 reads) into %TEMP%\Build-ZimmermanTools\_release
+
+    The build output is in %TEMP%\Build-ZimmermanTools\_build: -Out (which can be a share) only gets the staged
+    programs, a copy of this script and _staged.txt. The copy is replaced by every staging run, so the one in -Out is
+    always the current one.
 
     Command line tools are built with dotnet, programs with a window with Visual Studio's MSBuild (DevExpress licensing
     and the old-style projects need it).
 
-    Signing (-Sign <dir>, or --sign): signs every .exe and .dll under the folder with signtool.exe
+    Get-ZimmermanTools.ps1 is staged too (<Out>\Get-ZimmermanTools\script), so it is signed and zipped with the rest;
+    -Only Get-ZimmermanTools stages just the script.
+
+    Signing (-Sign <dir>, or --sign): signs every .exe, .dll and .ps1 under the folder with signtool.exe
     (sign /fd sha256 /tr <timestamp> /td sha256), many files per call, so a token asks for its password once per call:
     with the certificate picked automatically (/a, the default), or from a .pfx (-CertFile; its password is asked once).
     Files that already have a valid signature (DevExpress, Microsoft) are left alone unless -Force is used.
@@ -27,13 +34,18 @@
     Get-ZimmermanTools.zip) at the top, the others in net\ (Get-ZimmermanTools.ps1 looks for /net/).
 
     They can be combined; they run in this order: build and stage, sign, zip (so the zips have the signed files).
-    -Sign without a folder signs the staged folder.
+    -Sign without a folder signs the staged folder. With -Sign, a signing failure skips the zips.
+
+    Signing on another machine (a hardware token): staging leaves a copy of this script and _staged.txt (what was
+    staged, any failures, the commands) at the top of -Out. On the other machine, run that copy with --sign --zip
+    <download folder>: it takes its own folder as the staged one and needs no repositories (Windows PowerShell 5.1
+    or PowerShell 7).
 
 .PARAMETER Out
     Where to stage the programs. Also --out.
 
 .PARAMETER Sign
-    A folder to sign, recursively (.exe and .dll). Also --sign. Without a value after -Out, the -Out folder.
+    A folder to sign, recursively (.exe, .dll and .ps1). Also --sign. Without a value after -Out, the -Out folder.
 
 .PARAMETER Root
     The folder that has the repositories (default: the folder above this repository, where the other repositories are
@@ -44,7 +56,7 @@
     --only a,b and --tool a,b.
 
 .PARAMETER Clear
-    Delete everything in the -Out folder first (staged programs, the _build folder and the cached release zips), so
+    Delete everything in the -Out folder first, and the build output and cached release zips (in %TEMP%), so
     nothing is left from an earlier run. Also --clear.
 
 .PARAMETER Zip
@@ -73,12 +85,13 @@
     .\Build-ZimmermanTools.ps1 --out D:\Release --sign --zip \\server\share
     .\Build-ZimmermanTools.ps1 -Out D:\Release -Only RECmd,TimelineExplorer
     .\Build-ZimmermanTools.ps1 -Out D:\Release -Clear -Tool LECmd,MFTECmd
+    \\server\stage\Build-ZimmermanTools.ps1 --sign --zip \\server\share    (on the signing machine, after --out \\server\stage)
 #>
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [string] $Out,
     [string] $Sign,
-    [string] $Root = (Split-Path $PSScriptRoot -Parent),
+    [string] $Root,
     [Alias('Tool')]
     [string[]] $Only,
     [switch] $Clear,
@@ -93,6 +106,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+#(here, not as the parameter's default: Windows PowerShell 5.1 has no $PSScriptRoot there)
+if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
+
+# the build output (_build) and the cached release zips (_release): on this machine, so -Out (a share) only gets what is
+# staged
+$Work = Join-Path ([IO.Path]::GetTempPath()) 'Build-ZimmermanTools'
 
 # --out x / --sign x / --only a,b (--tool a,b) / --clear / --zip / --force / --certfile x (GNU style)
 for ($i = 0; $i -lt $Rest.Count; $i++) {
@@ -112,6 +131,13 @@ for ($i = 0; $i -lt $Rest.Count; $i++) {
         '^--?root$' { $Root = $Rest[++$i] }
         default { throw "Unknown argument '$($Rest[$i])'. Use --out <dir>, --clear, --tool a,b, --sign [<dir>], --zip <dir>, --staged <dir>, --certfile <pfx>, --force" }
     }
+}
+
+# the copy that staging leaves in the staged folder (for signing on another machine): that folder is the staged one
+$stagedFrom = $null
+if (-not $Out -and -not $Staged -and ($Sign -or $Zip) -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot '_staged.txt'))) {
+    $Staged = $PSScriptRoot
+    $stagedFrom = Join-Path $PSScriptRoot '_staged.txt'
 }
 
 if (-not $Out -and -not $Sign -and -not $Zip) {
@@ -142,6 +168,10 @@ if ($Clear) {
         $items = @(Get-ChildItem -LiteralPath $outFull -Force)
         Write-Host "Clearing $outFull ($($items.Count) item(s))" -ForegroundColor Yellow
         $items | Remove-Item -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $Work) {
+        Write-Host "Clearing $Work (the build output and the cached release zips)" -ForegroundColor Yellow
+        Remove-Item -LiteralPath $Work -Recurse -Force
     }
 }
 
@@ -247,7 +277,7 @@ function Write-Note([string]$text) {
 $releaseCache = $null
 function Get-ReleaseFile([string]$program, [string]$framework, [string]$pattern, [string]$folder) {
     if (-not $script:releaseCache) {
-        $script:releaseCache = Join-Path $Out '_release'
+        $script:releaseCache = Join-Path $Work '_release'
         New-Item -ItemType Directory -Force $script:releaseCache | Out-Null
         Write-Note "Downloading the download page https://tools.ericzimmermanstools.com (the current release zips' URLs: files no repository has come from them)"
         $page = (Invoke-WebRequest -Uri 'https://tools.ericzimmermanstools.com' -UseBasicParsing).Content
@@ -396,7 +426,15 @@ function Copy-Into([string]$source, [string]$dest) {
 function Invoke-Stage {
     $Out = [IO.Path]::GetFullPath($Out)
     New-Item -ItemType Directory -Force $Out | Out-Null
-    $buildRoot = Join-Path $Out '_build'
+    $buildRoot = Join-Path $Work '_build'
+    # left in -Out by earlier versions of this script
+    foreach ($old in '_build', '_release') {
+        $oldDir = Join-Path $Out $old
+        if (Test-Path -LiteralPath $oldDir) {
+            Write-Host "Deleting $oldDir (the build output and release zips are in $Work now)" -ForegroundColor Yellow
+            Remove-Item -LiteralPath $oldDir -Recurse -Force
+        }
+    }
     $results = New-Object System.Collections.Generic.List[object]
 
     $selected = if ($Only) { $programs | Where-Object { $Only -contains $_.Name } } else { $programs }
@@ -405,19 +443,40 @@ function Invoke-Stage {
         if ($unknown) { throw "Unknown program(s): $($unknown -join ', '). Known: $($programs.Name -join ', ')" }
     }
 
+    # -Root defaults to the folder above this script: a copy run from elsewhere (a share) finds no repositories
+    $missingRoot = @($selected | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Root $(if ($_.Script) { $_.Script } else { $_.Project }))) })
+    if ($missingRoot.Count -eq @($selected).Count) {
+        throw "None of the repositories are in '$Root' (the folder above this script, unless --root is given). Run the script from its repository (D:\Code\get-zimmermantools) or give --root <the folder with the repositories>, such as --root D:\Code"
+    }
+
     $registryPlugins = $null
     $tlePlugins = $null
 
     foreach ($p in $selected) {
+        # a script (Get-ZimmermanTools.ps1): copied as it is into <Out>\<Name>\script, signed there by --sign (the
+        # repository's copy stays unsigned) and zipped at the top
         if ($p.Script) {
+            Write-Host '== ' -ForegroundColor Red -NoNewline
+            Write-Host "$($p.Name) script" -ForegroundColor Green
+            $src = Join-Path $Root $p.Script
             $dest = Join-Path $Out "$($p.Name)\script"
-            Copy-Into (Join-Path $Root $p.Script) (Join-Path $dest (Split-Path $p.Script -Leaf))
+            if (-not (Test-Path -LiteralPath $src)) {
+                Write-Host "   $($p.Name): $src not found" -ForegroundColor Red
+                $results.Add([pscustomobject]@{ Program = $p.Name; Framework = 'script'; Result = "FAILED: $($p.Script) not found" })
+                continue
+            }
+            if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+            Copy-Into $src (Join-Path $dest (Split-Path $p.Script -Leaf))
+            Write-Note "Copied $src"
             $results.Add([pscustomobject]@{ Program = $p.Name; Framework = 'script'; Result = 'staged' })
             continue
         }
 
         $project = Join-Path $Root $p.Project
         if (-not (Test-Path $project)) {
+            Write-Host '== ' -ForegroundColor Red -NoNewline
+            Write-Host $p.Name -ForegroundColor Green
+            Write-Host "   $($p.Name): $project not found" -ForegroundColor Red
             $results.Add([pscustomobject]@{ Program = $p.Name; Framework = '-'; Result = "no project ($($p.Project))" })
             continue
         }
@@ -436,7 +495,8 @@ function Invoke-Stage {
                 $buildDir = Build-Program $p $fw $buildDir
                 New-Item -ItemType Directory -Force $target | Out-Null
 
-                $files = if ($fw.Name -eq 'net4' -or $p.SingleFile) { @('{0}.exe') } else { @('{0}.exe', '{0}.dll', '{0}.runtimeconfig.json') }
+                #(@(): a one-item array from an if is unrolled to a string, and += then appends to the string)
+                $files = @(if ($fw.Name -eq 'net4' -or $p.SingleFile) { '{0}.exe' } else { '{0}.exe', '{0}.dll', '{0}.runtimeconfig.json' })
                 $files += @($p.Files)
                 foreach ($f in $files | Where-Object { $_ }) {
                     $name = $f -f $asm
@@ -503,14 +563,39 @@ function Invoke-Stage {
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = $note })
             }
             catch {
+                # nothing left of a failed program: --zip would replace its download zip with what was staged so far
+                if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
                 Write-Host "   $($p.Name) $($fw.Name): $($_.Exception.Message)" -ForegroundColor Red
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = "FAILED: $($_.Exception.Message)" })
             }
         }
     }
 
-    $results | Format-Table -AutoSize | Out-String -Width 220 | Write-Host
-    if ($results | Where-Object { $_.Result -like 'FAILED*' -or $_.Result -like 'no project*' }) { $script:failed = $true }
+    $table = $results | Format-Table -AutoSize | Out-String -Width 220
+    Write-Host $table
+    $bad = @($results | Where-Object { $_.Result -like 'FAILED*' -or $_.Result -like 'no project*' })
+    if ($bad) { $script:failed = $true }
+
+    # everything another machine needs to sign and zip: this script, and what was staged (with the commands)
+    $self = Join-Path $Out (Split-Path $PSCommandPath -Leaf)
+    if ($self -ne $PSCommandPath) { Copy-Item -LiteralPath $PSCommandPath -Destination $self -Force }
+    $stagedNow = Get-ChildItem -LiteralPath $Out -Directory | Where-Object { $_.Name -notlike '_*' } | ForEach-Object {
+        "  $($_.Name): $((Get-ChildItem -LiteralPath $_.FullName -Directory).Name -join ', ')" }
+    @(
+        "Staged $(Get-Date -Format 'yyyy-MM-dd HH:mm') on $env:COMPUTERNAME from $([IO.Path]::GetFullPath($Root))"
+        $bad | ForEach-Object { "FAILED $($_.Program) $($_.Framework): $($_.Result)" }
+        ''
+        'This run:'
+        $table.Trim()
+        ''
+        'In this folder:'
+        $stagedNow
+        ''
+        'To sign and zip (on any machine; no repositories needed), from this folder:'
+        "  .\$(Split-Path $PSCommandPath -Leaf) --sign --zip <download folder>"
+        "  .\$(Split-Path $PSCommandPath -Leaf) --sign                     (sign only; --zip <folder> later)"
+    ) | Set-Content -LiteralPath (Join-Path $Out '_staged.txt') -Encoding UTF8
+    Write-Host "To sign and zip on another machine: $self --sign --zip <download folder>" -ForegroundColor Yellow
 }
 
 # The files whose Authenticode signature is not valid (each file is read in full and its certificate chain checked:
@@ -535,9 +620,11 @@ function Get-UnsignedFiles($files, [string]$activity) {
 
 function Invoke-Sign([string]$dir) {
     $dir = [IO.Path]::GetFullPath($dir)
-    Write-Host "Finding the .exe and .dll files in $dir"
-    $files = @(Get-ChildItem -LiteralPath $dir -Recurse -File -Include *.exe, *.dll |
-        Where-Object { $_.FullName -notmatch '\\_(build|release|zips)\\' })
+    Write-Host "Finding the .exe, .dll and .ps1 files in $dir"
+    #(only the programs' folders: not the copy of this script at the top of a staged folder)
+    $files = @(Get-ChildItem -LiteralPath $dir -Recurse -File -Include *.exe, *.dll, *.ps1 |
+        Where-Object { $_.FullName -notmatch '\\_(build|release|zips)\\' -and
+            -not ($_.Extension -eq '.ps1' -and $_.DirectoryName.TrimEnd('\') -ieq $dir.TrimEnd('\')) })
     $total = $files.Count
     Write-Note ("{0:N0} file(s), {1:N0} MB" -f $total, (($files | Measure-Object Length -Sum).Sum / 1MB))
 
@@ -593,6 +680,7 @@ function Invoke-Sign([string]$dir) {
         $bad | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Red }
         if ($bad.Count -gt 20) { Write-Host "  ... and $($bad.Count - 20) more" -ForegroundColor Red }
         $script:failed = $true
+        $script:signFailed = $true
     }
     else {
         Write-Host "All $($files.Count) file(s) signed" -ForegroundColor Green
@@ -621,7 +709,11 @@ function Invoke-Zip([string]$staged, [string]$dest) {
             $partial = "$zipFile.partial-$([guid]::NewGuid().ToString('N'))"
             try {
                 Copy-Item -LiteralPath $tmp -Destination $partial -Force
-                [IO.File]::Move($partial, $zipFile, $true)
+                # (Windows PowerShell 5.1's .NET Framework has no Move with overwrite: Replace does the same in one step)
+                if ($PSVersionTable.PSVersion.Major -ge 7) { [IO.File]::Move($partial, $zipFile, $true) }
+                #(no backup: [NullString]::Value, since $null arrives as "")
+                elseif (Test-Path -LiteralPath $zipFile) { [IO.File]::Replace($partial, $zipFile, [NullString]::Value) }
+                else { [IO.File]::Move($partial, $zipFile) }
             }
             finally {
                 if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
@@ -635,7 +727,15 @@ function Invoke-Zip([string]$staged, [string]$dest) {
 }
 
 $script:failed = $false
+$script:signFailed = $false
+if ($stagedFrom) {
+    $lines = @(Get-Content -LiteralPath $stagedFrom)
+    Write-Host "Staged folder $Staged ($($lines[0]))"
+    $lines | Where-Object { $_ -like 'FAILED *' } | ForEach-Object { Write-Host "   $_ (not staged: not in the zips)" -ForegroundColor Red }
+}
 if ($Out) { Invoke-Stage }
 if ($Sign) { Invoke-Sign $Sign }
-if ($Zip) { Invoke-Zip $(if ($Out) { $Out } else { $Staged }) $Zip }
+# zips only with every file signed: a signing failure leaves the download folder as it was
+if ($Zip -and $Sign -and $script:signFailed) { Write-Host "Not zipping: signing failed" -ForegroundColor Red }
+elseif ($Zip) { Invoke-Zip $(if ($Out) { $Out } else { $Staged }) $Zip }
 if ($script:failed) { exit 1 }
