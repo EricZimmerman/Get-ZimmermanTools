@@ -21,7 +21,7 @@
         (from the page Get-ZimmermanTools.ps1 reads) into %TEMP%\Build-ZimmermanTools\_release
 
     The build output is in %TEMP%\Build-ZimmermanTools\_build: -Out (which can be a share) only gets the staged
-    programs, a copy of this script and _staged.txt. The copy is replaced by every staging run, so the one in -Out is
+    programs, a copy of this script, _staged.txt and _sign.txt. The copy is replaced by every staging run, so the one in -Out is
     always the current one.
 
     Command line tools are built with dotnet, programs with a window with Visual Studio's MSBuild (DevExpress licensing
@@ -30,10 +30,19 @@
     Get-ZimmermanTools.ps1 is staged too (<Out>\Get-ZimmermanTools\script), so it is signed and zipped with the rest;
     -Only Get-ZimmermanTools stages just the script.
 
-    Signing (-Sign <dir>, or --sign): signs every .exe, .dll and .ps1 under the folder with signtool.exe
+    Staging also writes _sign.txt at the top of -Out: the files to sign, one path per line. Only Eric's: every .exe and
+    .ps1 of the programs, each program's own dll, the registry and Timeline Explorer plugins, and the dlls of his
+    projects and NuGet packages (a deps.json "project", or a package whose .nuspec in the NuGet cache names Eric
+    Zimmerman). Third-party dlls (Serilog, CsvHelper, ...), Microsoft's and DevExpress' are not listed. It is decided
+    when staging, since the signing machine has no build output or NuGet cache; it is in no zip.
+
+    Signing (-Sign <dir>, or --sign): signs the files _sign.txt lists with signtool.exe
     (sign /fd sha256 /tr <timestamp> /td sha256), many files per call, so a token asks for its password once per call:
     with the certificate picked automatically (/a, the default), or from a .pfx (-CertFile; its password is asked once).
-    Files that already have a valid signature (DevExpress, Microsoft) are left alone unless -Force is used.
+    Files that already have a valid signature are left alone unless -Force is used (which re-signs only listed files).
+    Microsoft's and DevExpress' files are never signed, even listed or with -Force. A listed file that is missing is
+    reported (and the zips are skipped). A staged folder without _sign.txt (staged by an older version) is not signed:
+    restage it.
 
     Zips (-Zip <dir>, or --zip): one zip per program and framework from the staged folder (-Out, or -Staged for a
     folder staged and signed earlier), laid out as the download folder: the .NET Framework builds (and
@@ -51,7 +60,7 @@
     Where to stage the programs. Also --out.
 
 .PARAMETER Sign
-    A folder to sign, recursively (.exe, .dll and .ps1). Also --sign. Without a value after -Out, the -Out folder.
+    The staged folder to sign (the files its _sign.txt lists). Also --sign. Without a value, the -Out or -Staged folder.
 
 .PARAMETER Root
     The folder that has the repositories (default: the folder above this repository, where the other repositories are
@@ -75,7 +84,7 @@
     Sign with this .pfx instead of a certificate from the store; its password is asked once.
 
 .PARAMETER Force
-    Sign files that already have a valid signature too.
+    Sign the listed files that already have a valid signature too (never Microsoft's or DevExpress').
 
 .PARAMETER SignTool
     The signtool.exe to use (default: on the PATH, else the newest Windows SDK's, the App Certification Kit's or
@@ -474,6 +483,85 @@ function Export-RepoPath([string]$relative) {
     return $result
 }
 
+# Microsoft's and DevExpress' files are never signed (--sign checks this too, even with --force): by name, or by the
+# company or copyright in their version information
+function Test-VendorFile([string]$path) {
+    $name = Split-Path $path -Leaf
+    if ($name -match '^(Microsoft|System|DevExpress|mscorlib|netstandard|WindowsBase|Presentation(Core|Framework))\.') { return $true }
+    if ($name -notmatch '\.(exe|dll)$') { return $false }
+    try { $vi = [Diagnostics.FileVersionInfo]::GetVersionInfo($path) } catch { return $false }
+    #(not "Microsoft" anywhere: a project without a Company has its assembly name there, such as TLEFileMicrosoft)
+    return "$($vi.CompanyName)" -match '^\s*(Microsoft|Developer Express|DevExpress)\b' -or
+        "$($vi.LegalCopyright)" -match 'Microsoft Corporation|Developer Express'
+}
+
+# Is a NuGet package Eric's? Its .nuspec in the NuGet cache names him (authors, owners or copyright), or its project or
+# repository is on github.com/EricZimmerman (older ShellBagsParser and ERZHelpers packages have the package id as
+# authors). Without the .nuspec (a cache cleared since the build): the known package ids, with a warning
+$nugetRoot = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE '.nuget\packages' }
+$ericPackageCache = @{}
+$ericPackagesFallback = @('Amcache', 'AppCompatCache', 'Boot', 'ERZHelpers', 'ExtensionBlocks', 'EZ.HexBox', 'GuidMapping',
+    'HexEditorControl', 'I30', 'JumpList', 'Lnk', 'MFT', 'MFT.LogFile', 'OleCf', 'Prefetch', 'Registry', 'RegistryPluginBase',
+    'SDB', 'Secure', 'ShellBagsParser', 'Usn')
+function Test-EricPackage([string]$id, [string]$path) {
+    $key = "$id/$path"
+    if ($script:ericPackageCache.ContainsKey($key)) { return $script:ericPackageCache[$key] }
+    $nuspec = if ($path) { Get-ChildItem -LiteralPath (Join-Path $nugetRoot $path) -Filter *.nuspec -File -ErrorAction SilentlyContinue | Select-Object -First 1 }
+    if ($nuspec) {
+        $text = [IO.File]::ReadAllText($nuspec.FullName)
+        $mine = $text -match '<(authors|owners|copyright)>[^<]*Zimmerman' -or $text -match '(?i)github\.com/EricZimmerman/'
+    }
+    else {
+        $mine = $ericPackagesFallback -contains $id
+        Write-Warning "No .nuspec for $id in $nugetRoot ($path): $(if ($mine) { 'Eric''s by the known list' } else { 'taken as third-party (not signed)' })"
+    }
+    $script:ericPackageCache[$key] = $mine
+    return $mine
+}
+
+# The files of a deps.json (relative to its folder, as Get-DepsAssets lays them out) that are Eric's: from a project
+# (his repositories) or from a package of his
+function Get-EricDepsAssets([string]$depsJson) {
+    $paths = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $deps = Get-Content -LiteralPath $depsJson -Raw | ConvertFrom-Json
+    $libraries = $deps.targets.($deps.runtimeTarget.name)
+    foreach ($lib in $libraries.PSObject.Properties) {
+        $info = $deps.libraries.($lib.Name)
+        $mine = if ($info.type -eq 'project') { $true }
+            elseif ($info.type -eq 'package') { Test-EricPackage (($lib.Name -split '/')[0]) $info.path }
+            else { $false }
+        if (-not $mine) { continue }
+        $v = $lib.Value
+        foreach ($kind in 'runtime', 'native') {
+            if ($v.$kind) { foreach ($a in $v.$kind.PSObject.Properties.Name) { [void]$paths.Add(($a -split '/')[-1]) } }
+        }
+        if ($v.runtimeTargets) { foreach ($a in $v.runtimeTargets.PSObject.Properties.Name) { [void]$paths.Add(($a -replace '/', '\')) } }
+        if ($v.resources) {
+            foreach ($r in $v.resources.PSObject.Properties) { [void]$paths.Add("$($r.Value.locale)\$(($r.Name -split '/')[-1])") }
+        }
+    }
+    return ,$paths
+}
+
+# What --sign signs in a staged program (<Out>\<Program>\<framework>), decided here, where the build and the NuGet cache
+# are (the signing machine has neither): every .exe and .ps1, and the dlls that are Eric's (the program's own, the
+# plugins, his projects and packages). Third-party, Microsoft and DevExpress files are left out. Returns
+# {Path (relative to the stage); Sign; Why}
+function Get-SignEntries([string]$stage, [string]$target, [string]$asm, [string]$depsJson, $pluginNames) {
+    $own = if ($depsJson -and (Test-Path -LiteralPath $depsJson)) { Get-EricDepsAssets $depsJson } else { $null }
+    foreach ($f in Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll', '.ps1' }) {
+        $rel = $f.FullName.Substring($stage.TrimEnd('\').Length + 1)
+        $relTarget = if ($f.FullName.StartsWith("$($target.TrimEnd('\'))\", [StringComparison]::OrdinalIgnoreCase)) { $f.FullName.Substring($target.TrimEnd('\').Length + 1) } else { $rel }
+        $why = if (Test-VendorFile $f.FullName) { $null }
+            elseif ($f.Extension -in '.exe', '.ps1') { $f.Extension }
+            elseif ($relTarget -ieq "$asm.dll") { 'the program' }
+            elseif ($relTarget -like 'Plugins\*' -and $pluginNames -contains $f.Name) { 'plugin' }
+            elseif ($own -and $own.Contains($relTarget)) { 'Eric''s project or package' }
+            else { $null }
+        [pscustomobject]@{ Path = $rel; Sign = [bool]$why; Why = $why }
+    }
+}
+
 function Invoke-Stage {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $Out = [IO.Path]::GetFullPath($Out)
@@ -504,6 +592,9 @@ function Invoke-Stage {
 
     $registryPlugins = $null
     $tlePlugins = $null
+    # the files --sign signs (written to <Out>\_sign.txt), and the staged programs this run replaced (Program\fw)
+    $signList = New-Object System.Collections.Generic.List[string]
+    $stagedKeys = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 
     foreach ($p in $selected) {
         # a script (Get-ZimmermanTools.ps1): copied as it is into <Out>\<Name>\script, signed there by --sign (the
@@ -513,6 +604,7 @@ function Invoke-Stage {
             Write-Host "$($p.Name) script" -ForegroundColor Green
             $src = Join-Path $Root $p.Script
             $dest = Join-Path $Out "$($p.Name)\script"
+            [void]$stagedKeys.Add("$($p.Name)\script")
             if (-not (Test-Path -LiteralPath $src)) {
                 Write-Host "   $($p.Name): $src not found" -ForegroundColor Red
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = 'script'; Result = "FAILED: $($p.Script) not found" })
@@ -521,6 +613,7 @@ function Invoke-Stage {
             if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
             Copy-Into $src (Join-Path $dest (Split-Path $p.Script -Leaf))
             Write-Note "Copied $src"
+            $signList.Add("$($p.Name)\script\$(Split-Path $p.Script -Leaf)")
             $results.Add([pscustomobject]@{ Program = $p.Name; Framework = 'script'; Result = 'staged' })
             continue
         }
@@ -541,6 +634,7 @@ function Invoke-Stage {
             $buildDir = Join-Path $buildRoot "$($p.Name)\$($fw.Name)"
             $stage = Join-Path $Out "$($p.Name)\$($fw.Name)"
             $target = if ($p.Folder) { Join-Path $stage $p.Folder } else { $stage }
+            [void]$stagedKeys.Add("$($p.Name)\$($fw.Name)")
 
             try {
                 if (Test-Path $buildDir) { Remove-Item -LiteralPath $buildDir -Recurse -Force }
@@ -641,6 +735,17 @@ function Invoke-Stage {
                 if ($missing) {
                     throw "$($missing.Count) dll(s) of the build are neither embedded nor staged: $(($missing.Name | Select-Object -First 4) -join ', ')"
                 }
+                # what --sign signs (decided here: the signing machine has no build output or NuGet cache)
+                $pluginNames = @(switch ($p.Special) {
+                        'RegistryPlugins' { Get-ChildItem -LiteralPath $registryPlugins -Filter *.dll -File | ForEach-Object Name }
+                        'TlePlugins' { Get-ChildItem -LiteralPath (Join-Path $tlePlugins 'Plugins') -Filter *.dll -File | ForEach-Object Name }
+                    })
+                $entries = @(Get-SignEntries $stage $target $asm $depsJson $pluginNames)
+                $toSign = @($entries | Where-Object Sign)
+                foreach ($e in $toSign) { $signList.Add("$($p.Name)\$($fw.Name)\$($e.Path)") }
+                Write-Note ("To sign: {0} of {1} .exe/.dll/.ps1 (Eric's); {2} third-party, Microsoft or DevExpress left unsigned" -f
+                    $toSign.Count, $entries.Count, ($entries.Count - $toSign.Count))
+
                 $note = if ($p.SingleFile) { 'staged (single file)' } else { 'staged' }
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = $note })
             }
@@ -658,8 +763,28 @@ function Invoke-Stage {
     $bad = @($results | Where-Object { $_.Result -like 'FAILED*' -or $_.Result -like 'no project*' })
     if ($bad) { $script:failed = $true }
 
+    # _sign.txt: the files --sign signs, one path per line (relative to -Out). The lines of programs not staged this run
+    # (an earlier run with other --tool names) are kept while their files are there
+    $manifest = Join-Path $Out '_sign.txt'
+    $kept = @()
+    if (Test-Path -LiteralPath $manifest) {
+        $kept = @(Get-Content -LiteralPath $manifest | Where-Object { $_ -and $_ -notmatch '^\s*#' } | Where-Object {
+                $parts = $_ -split '\\'
+                $parts.Count -gt 2 -and -not $stagedKeys.Contains("$($parts[0])\$($parts[1])") -and (Test-Path -LiteralPath (Join-Path $Out $_))
+            })
+    }
+    $all = @($kept) + @($signList) | Sort-Object -Unique
+    @(
+        "# The files Build-ZimmermanTools.ps1 --sign signs (paths relative to this folder), written by staging on $env:COMPUTERNAME"
+        "# $(Get-Date -Format 'yyyy-MM-dd HH:mm'): every .exe and .ps1 in the programs, and the dlls that are Eric's (each program's"
+        "# own, the plugins, his projects and his NuGet packages). Third-party, Microsoft and DevExpress files are not listed."
+        "# Not in any zip. Restage (--out) to change it."
+        $all
+    ) | Set-Content -LiteralPath $manifest -Encoding UTF8
+    Write-Note "$manifest`: $($all.Count) file(s) to sign"
+
     # everything another machine needs to sign and zip: this script, and what was staged (with the commands)
-    $self = Join-Path $Out (Split-Path $PSCommandPath -Leaf)
+    $self =Join-Path $Out (Split-Path $PSCommandPath -Leaf)
     if ($self -ne $PSCommandPath) { Copy-Item -LiteralPath $PSCommandPath -Destination $self -Force }
     $stagedNow = Get-ChildItem -LiteralPath $Out -Directory | Where-Object { $_.Name -notlike '_*' } | ForEach-Object {
         "  $($_.Name): $((Get-ChildItem -LiteralPath $_.FullName -Directory).Name -join ', ')" }
@@ -676,6 +801,7 @@ function Invoke-Stage {
         'To sign and zip (on any machine; no repositories needed), from this folder:'
         "  .\$(Split-Path $PSCommandPath -Leaf) --sign --zip <download folder>"
         "  .\$(Split-Path $PSCommandPath -Leaf) --sign                     (sign only; --zip <folder> later)"
+        '  (--sign signs only the files _sign.txt lists: Eric''s, not third-party, Microsoft or DevExpress files)'
     ) | Set-Content -LiteralPath (Join-Path $Out '_staged.txt') -Encoding UTF8
     Write-Host "To sign and zip on another machine: $self --sign --zip <download folder>" -ForegroundColor Yellow
 }
@@ -701,17 +827,52 @@ function Get-UnsignedFiles($files, [string]$activity) {
 }
 
 function Invoke-Sign([string]$dir) {
-    $dir = [IO.Path]::GetFullPath($dir)
-    Write-Host "Finding the .exe, .dll and .ps1 files in $dir"
-    #(only the programs' folders: not the copy of this script at the top of a staged folder)
-    $files = @(Get-ChildItem -LiteralPath $dir -Recurse -File -Include *.exe, *.dll, *.ps1 |
-        Where-Object { $_.FullName -notmatch '\\_(build|release|zips)\\' -and
-            -not ($_.Extension -eq '.ps1' -and $_.DirectoryName.TrimEnd('\') -ieq $dir.TrimEnd('\')) })
+    $dir = [IO.Path]::GetFullPath($dir).TrimEnd('\')
+    # only the files staging listed in _sign.txt (Eric's: not third-party, Microsoft or DevExpress files); a folder
+    # staged before it existed is not signed at all rather than everything in it
+    $manifest = Join-Path $dir '_sign.txt'
+    if (-not (Test-Path -LiteralPath $manifest)) {
+        Write-Host "Not signing: $dir has no _sign.txt (the list of Eric's files to sign, written by staging). It was staged by an older version of this script, or is not a staged folder (give the folder --out staged to, not a program in it): restage it with --out." -ForegroundColor Red
+        $script:failed = $true
+        $script:signFailed = $true
+        return
+    }
+    Write-Host "Reading the files to sign from $manifest"
+    $listed = @(Get-Content -LiteralPath $manifest | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') } | Sort-Object -Unique)
+    $missingFiles = @($listed | Where-Object { -not (Test-Path -LiteralPath (Join-Path $dir $_) -PathType Leaf) })
+    if ($missingFiles) {
+        Write-Host ("{0:N0} file(s) in _sign.txt are not in {1} (not signed):" -f $missingFiles.Count, $dir) -ForegroundColor Red
+        $missingFiles | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        if ($missingFiles.Count -gt 20) { Write-Host "  ... and $($missingFiles.Count - 20) more" -ForegroundColor Red }
+        $script:failed = $true
+        $script:signFailed = $true
+    }
+    $files = @($listed | Where-Object { $missingFiles -notcontains $_ } | ForEach-Object { Get-Item -LiteralPath (Join-Path $dir $_) })
+    # never Microsoft's or DevExpress' (not even with --force), whatever the list says
+    $vendor = @($files | Where-Object { Test-VendorFile $_.FullName })
+    if ($vendor) {
+        Write-Warning "$($vendor.Count) file(s) in _sign.txt are Microsoft's or DevExpress' (not signed): $(($vendor.Name | Select-Object -First 5) -join ', ')"
+        $files = @($files | Where-Object { $vendor.FullName -notcontains $_.FullName })
+    }
+
+    # the other .exe/.dll/.ps1 files in the programs (third-party, Microsoft, DevExpress): left unsigned by design
+    $listedSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($l in $listed) { [void]$listedSet.Add([IO.Path]::GetFullPath((Join-Path $dir $l))) }
+    $others = @(Get-ChildItem -LiteralPath $dir -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll', '.ps1' } |
+        Where-Object { $_.DirectoryName.TrimEnd('\') -ine $dir -and -not $listedSet.Contains($_.FullName) })
     $total = $files.Count
-    Write-Note ("{0:N0} file(s), {1:N0} MB" -f $total, (($files | Measure-Object Length -Sum).Sum / 1MB))
+    Write-Note ("{0:N0} file(s) to sign, {1:N0} MB; {2:N0} other .exe/.dll/.ps1 file(s) left unsigned by design (third-party, Microsoft, DevExpress)" -f
+        $total, (($files | Measure-Object Length -Sum).Sum / 1MB), $others.Count)
+    # a staged program with nothing listed was staged before _sign.txt (or by a run that failed for it)
+    $unlisted = @(Get-ChildItem -LiteralPath $dir -Directory | Where-Object { $_.Name -notlike '_*' } | ForEach-Object {
+            foreach ($fwDir in Get-ChildItem -LiteralPath $_.FullName -Directory) {
+                $prefix = "$($_.Name)\$($fwDir.Name)\"
+                if (-not ($listed | Where-Object { $_.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })) { "$($_.Name)\$($fwDir.Name)" }
+            } })
+    if ($unlisted) { Write-Warning "Nothing in _sign.txt for $($unlisted -join ', '): not signed (restage them with --out)" }
 
     if (-not $Force -and $total -gt 0) {
-        Write-Note "Checking their signatures (files already validly signed, such as DevExpress' and Microsoft's, are skipped; --force signs them too)"
+        Write-Note "Checking their signatures (files already validly signed are skipped; --force signs them again)"
         $files = Get-UnsignedFiles $files 'Checking signatures'
         Write-Note ("{0:N0} to sign, {1:N0} already signed" -f $files.Count, ($total - $files.Count))
     }
