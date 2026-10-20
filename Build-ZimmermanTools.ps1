@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     Staging (-Out, or --out): every program is built from its repository (under -Root) for each framework its project
-    targets, and staged in <Out>\<Program>\<framework> (net4, net10, ...), laid out as in its download zip: the
-    single-file command line tools as their files, the others in a folder (RECmd\RECmd\..., RegistryExplorer\RegistryExplorer\...).
+    targets, and staged in <Out>\<Program>\<framework> (net4, net10, ...), laid out as in its download zip: most
+    command line tools as their files, the others in a folder (RECmd\RECmd\..., RegistryExplorer\RegistryExplorer\...).
 
       - EvtxECmd, SQLECmd: their Maps; RECmd: BatchExamples and the registry plugins (Plugins)
       - Registry Explorer: the registry plugins, the bookmarks (RegistryExplorerBookmarks\Common), the manual
@@ -14,7 +14,9 @@
         dependencies are inside it), in their own folder with what the publish leaves next to it: native dlls such as
         sni.dll (never extracted to %TEMP%), <Program>.dll.config, content files (EZViewer's Extensions.yaml). No pdbs.
         The command line tools stay cross platform: <Tool>.dll with its dependencies inside (Costura), run with
-        <Tool>.exe or dotnet <Tool>.dll; AmcacheParser and WxTCmd are single files (win-x64)
+        <Tool>.exe or dotnet <Tool>.dll. The native SQLite libraries of AmcacheParser, WxTCmd (e_sqlite3.dll,
+        libe_sqlite3.so, libe_sqlite3.dylib) and SQLECmd (runtimes\<rid>\native\SQLite.Interop.dll) are files next to
+        the tool (Natives), never inside it or extracted anywhere when it runs
       - Maps, batch files, bookmarks, the manual and the layouts are taken as committed (HEAD), byte for byte what
         GitHub has (and what --sync downloads), not from the working copy (CRLF on Windows); uncommitted changes in
         them are left out with a warning
@@ -33,7 +35,10 @@
     Checks: every dll the build made is staged or inside the program (Costura's resources, or a single file's bundle,
     read from its manifest); a program with a window has every file its bundled deps.json lists inside the exe or next to
     it, no managed dll loose next to it (they belong in the exe; plugins in Plugins excepted), and every file the publish
-    made (but pdbs) staged (next to the exe as published; Special may replace those in Plugins and Layouts).
+    made (but pdbs) staged (next to the exe as published; Special may replace those in Plugins and Layouts). The zips
+    that Get-ZimmermanTools.ps1 extracts into the same folder (the .NET 10 ones into net\, the .NET Framework ones at
+    the top) must not have a file at the same path with different contents (AmcacheParser and WxTCmd both have
+    e_sqlite3.dll at the top): staging and --zip fail if they do.
 
     Get-ZimmermanTools.ps1 is staged too (<Out>\Get-ZimmermanTools\script), so it is signed and zipped with the rest;
     -Only Get-ZimmermanTools stages just the script.
@@ -205,11 +210,24 @@ if ($Clear) {
 # others: {0}.exe, {0}.dll, {0}.runtimeconfig.json). Gui with a Folder (.NET, not net4): published as one exe
 # (Test-SingleFileGui: framework dependent, win-x64, native libraries next to it) and staged as the publish output
 # without pdbs; Files are then only checked to be there. Copy: repository folders/files -> paths in the staged program.
-# Release: files only in the release zips. Special: steps for plugins and layouts. SingleFile: published as one exe
-# (framework dependent, win-x64, native libraries inside: the command line tools with SQLite, which have no Costura).
+# Release: files only in the release zips. Special: steps for plugins and layouts. Natives: native libraries from the
+# build output (path in the build -> path in the staged program), staged as files next to the tool: Costura doesn't
+# embed them and nothing may be extracted when a tool runs (Eric, 2026-10-20); never signed (third party).
 # ---------------------------------------------------------------------------------------------------------------------
+# SQLitePCLRaw's e_sqlite3 (Microsoft.Data.Sqlite) for Windows x64, Linux x64 and macOS arm64: each OS has its own file
+# name, so they sit side by side next to the tool, where .NET looks first (the app folder; there is no deps.json).
+# AmcacheParser and WxTCmd both have them at the top of net\: the same SQLitePCLRaw version, checked byte for byte
+$sqlitePclNatives = [ordered]@{
+    'runtimes\win-x64\native\e_sqlite3.dll' = 'e_sqlite3.dll'
+    'runtimes\linux-x64\native\libe_sqlite3.so' = 'libe_sqlite3.so'
+    'runtimes\osx-arm64\native\libe_sqlite3.dylib' = 'libe_sqlite3.dylib'
+}
+# System.Data.SQLite's SQLite.Interop.dll has the same name on every OS: SQLECmd loads runtimes\<rid>\native\ (NativeSqlite.cs)
+$sqliteInteropNatives = [ordered]@{}
+foreach ($rid in 'win-x64', 'win-x86', 'linux-x64', 'osx-x64') { $sqliteInteropNatives["runtimes\$rid\native\SQLite.Interop.dll"] = "runtimes\$rid\native\SQLite.Interop.dll" }
+
 $programs = @(
-    @{ Name = 'AmcacheParser'; Project = 'AmcacheParser\AmcacheParser\AmcacheParser.csproj'; SingleFile = $true }
+    @{ Name = 'AmcacheParser'; Project = 'AmcacheParser\AmcacheParser\AmcacheParser.csproj'; Natives = $sqlitePclNatives }
     @{ Name = 'AppCompatCacheParser'; Project = 'AppCompatCacheParser\AppCompatCacheParser\AppCompatCacheParser.csproj' }
     @{ Name = 'bstrings'; Project = 'bstrings\bstrings\bstrings.csproj' }
     @{ Name = 'EvtxECmd'; Project = 'evtx\EvtxECmd\EvtxECmd.csproj'; Folder = 'EvtxeCmd'; Copy = @{ 'evtx\evtx\Maps' = 'Maps' } }
@@ -223,11 +241,11 @@ $programs = @(
     @{ Name = 'RECmd'; Project = 'RECmd\RECmd\RECmd.csproj'; Folder = 'RECmd'; Copy = @{ 'RECmd\BatchExamples' = 'BatchExamples' }; Special = 'RegistryPlugins' }
     @{ Name = 'rla'; Project = 'RECmd\rla\rla.csproj' }
     @{ Name = 'SBECmd'; Project = 'ShellBagsExplorer\SBE\SBE.csproj' }
-    @{ Name = 'SQLECmd'; Project = 'SQLECmd\SQLECmd\SQLECmd.csproj'; Folder = 'SQLECmd'; Copy = @{ 'SQLECmd\SQLMap\Maps' = 'Maps' } }
+    @{ Name = 'SQLECmd'; Project = 'SQLECmd\SQLECmd\SQLECmd.csproj'; Folder = 'SQLECmd'; Copy = @{ 'SQLECmd\SQLMap\Maps' = 'Maps' }; Natives = $sqliteInteropNatives }
     @{ Name = 'SrumECmd'; Project = 'srum\SrumECmd\SrumECmd.csproj' }
     @{ Name = 'SumECmd'; Project = 'sum\SumECmd\SumECmd.csproj' }
     @{ Name = 'VSCMount'; Project = 'vscmount\VSCMount\VSCMount.csproj' }
-    @{ Name = 'WxTCmd'; Project = 'WxTCmd\WxTCmd\WxTCmd.csproj'; SingleFile = $true }
+    @{ Name = 'WxTCmd'; Project = 'WxTCmd\WxTCmd\WxTCmd.csproj'; Natives = $sqlitePclNatives }
 
     @{ Name = 'EZViewer'; Project = 'EZViewer\EZViewer\EZViewer.csproj'; Folder = 'EZViewer'; Gui = $true; Files = @('Extensions.yaml'); Release = @('LICENSE.txt') }
     @{ Name = 'Hasher'; Project = 'Hasher\Hasher2\Hasher2.vbproj'; Folder = 'Hasher'; Gui = $true; Release = @('LICENSE.txt'); ZipName = 'hasher' }
@@ -406,13 +424,6 @@ function Build-Program($p, $fw, [string]$buildDir) {
         return $outputDir
     }
 
-    if ($p.SingleFile) {
-        # one exe with the dependencies and native libraries (SQLite) inside, as the project's CLAUDE.md releases it
-        $output = & dotnet publish $project -c Release -f $fw.Tfm -r win-x64 --self-contained false -p:PublishSingleFile=true -o $buildDir --nologo -v quiet 2>&1
-        if ($LASTEXITCODE -ne 0) { Show-BuildErrors $output; throw "the publish failed" }
-        return $buildDir
-    }
-
     # a full build: Fody (Costura) only weaves when the compiler runs, so an up-to-date obj left from a build without
     # weaving was copied as is (a 2 MB RegistryExplorer.dll instead of 94 MB with its dependencies)
     $output = & dotnet build $project -c Release -f $fw.Tfm -o $buildDir --no-incremental --nologo -v quiet 2>&1
@@ -446,6 +457,24 @@ function Get-CosturaEmbedded([string]$assembly) {
     }
     finally { $fs.Dispose() }
     return ,$names
+}
+
+# The native libraries embedded in an assembly as resources: Costura's unmanaged assemblies (costura32.*, costura64.*,
+# costura-<rid>.*), which it extracts to a temp folder when the program starts, and SQLite natives (SQLite.Interop,
+# e_sqlite3) embedded by hand. A command line tool must have none (nothing may be extracted on the user's machine)
+function Get-EmbeddedNatives([string]$assembly) {
+    $fs = [IO.File]::OpenRead($assembly)
+    try {
+        $pe = [System.Reflection.PortableExecutable.PEReader]::new($fs)
+        if (-not $pe.HasMetadata) { return }
+        $md = [System.Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($pe)
+        foreach ($h in $md.ManifestResources) {
+            $n = $md.GetString($md.GetManifestResource($h).Name)
+            #(costura.<name>.dll: a managed assembly, such as SQLitePCLRaw.provider.e_sqlite3.dll)
+            if ($n -match '^costura(32|64|-[\w-]+)\.' -or ($n -notmatch '^costura\.' -and $n -match '(?i)sqlite\.interop|e_sqlite3')) { $n }
+        }
+    }
+    finally { $fs.Dispose() }
 }
 
 # The files inside a .NET single-file bundle (an exe PublishSingleFile made), from its manifest: the host has the
@@ -641,6 +670,40 @@ function Get-SignEntries([string]$stage, [string]$target, [string]$asm, [string]
     }
 }
 
+# Get-ZimmermanTools.ps1 extracts every zip of a kind into one folder (the .NET Framework zips and the script at the
+# top of -Dest, the .NET 10 ones into <Dest>\net): two zips with a file at the same path there overwrite each other.
+# That is fine only for the same bytes (AmcacheParser and WxTCmd both have e_sqlite3.dll, libe_sqlite3.so and
+# libe_sqlite3.dylib at the top of theirs). Returns a line per path whose staged files differ, for every program staged
+# in $staged (also those staged by an earlier --only run)
+function Get-SharedPathConflicts([string]$staged) {
+    $seen = @{}
+    foreach ($programDir in Get-ChildItem -LiteralPath $staged -Directory | Where-Object { $_.Name -notlike '_*' }) {
+        foreach ($fwDir in Get-ChildItem -LiteralPath $programDir.FullName -Directory) {
+            $where = if ($fwDir.Name -in @('net4', 'script')) { '' } else { 'net\' }
+            foreach ($f in Get-ChildItem -LiteralPath $fwDir.FullName -Recurse -File) {
+                $key = $where + $f.FullName.Substring($fwDir.FullName.TrimEnd('\').Length + 1)
+                if (-not $seen.ContainsKey($key)) { $seen[$key] = New-Object System.Collections.Generic.List[object] }
+                $seen[$key].Add([pscustomobject]@{ Program = "$($programDir.Name) $($fwDir.Name)"; File = $f })
+            }
+        }
+    }
+    foreach ($key in $seen.Keys | Sort-Object) {
+        $list = $seen[$key]
+        if ($list.Count -lt 2) { continue }
+        #(.NET directly: Get-FileHash's module isn't always loadable in Windows PowerShell 5.1)
+        $sha = [Security.Cryptography.SHA256]::Create()
+        $hashes = $list | ForEach-Object {
+            $fs = [IO.File]::OpenRead($_.File.FullName)
+            try { $h = [BitConverter]::ToString($sha.ComputeHash($fs)).Replace('-', '') } finally { $fs.Dispose() }
+            [pscustomobject]@{ Program = $_.Program; Hash = $h }
+        }
+        $sha.Dispose()
+        if (@($hashes.Hash | Select-Object -Unique).Count -gt 1) {
+            "$key differs between $(($hashes | ForEach-Object { "$($_.Program) ($($_.Hash.Substring(0, 12)))" }) -join ', ')"
+        }
+    }
+}
+
 function Invoke-Stage {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $Out = [IO.Path]::GetFullPath($Out)
@@ -742,13 +805,25 @@ function Invoke-Stage {
                 }
                 else {
                     #(@(): a one-item array from an if is unrolled to a string, and += then appends to the string)
-                    $files = @(if ($fw.Name -eq 'net4' -or $p.SingleFile) { '{0}.exe' } else { '{0}.exe', '{0}.dll', '{0}.runtimeconfig.json' })
+                    $files = @(if ($fw.Name -eq 'net4') { '{0}.exe' } else { '{0}.exe', '{0}.dll', '{0}.runtimeconfig.json' })
                     $files += @($p.Files)
                     foreach ($f in $files | Where-Object { $_ }) {
                         $name = $f -f $asm
                         $src = Join-Path $buildDir $name
                         if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Force }
                         elseif ($name -notlike '*.runtimeconfig.json' -or $fw.Name -ne 'net4') { throw "'$name' is not in the build output" }
+                    }
+                    # native libraries (SQLite) as files next to the tool: Costura doesn't embed them, and a tool must
+                    # never extract anything when it runs
+                    if ($p.Natives) {
+                        foreach ($k in @($p.Natives.Keys)) {
+                            $src = Join-Path $buildDir $k
+                            if (-not (Test-Path -LiteralPath $src)) { throw "native '$k' is not in the build output" }
+                            $dest = Join-Path $target $p.Natives[$k]
+                            New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+                            Copy-Item -LiteralPath $src -Destination $dest -Force
+                        }
+                        Write-Note "Natives next to it: $(@($p.Natives.Values) -join ', ')"
                     }
                 }
 
@@ -795,8 +870,16 @@ function Invoke-Stage {
                 # every dll the build made must be in the program: staged next to it, or embedded by Costura or in the
                 # single file's bundle (a build without either can't run: the dependencies would be missing)
                 $embedded = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-                $main = Join-Path $target ($(if ($fw.Name -eq 'net4' -or $p.SingleFile -or $singleGui) { '{0}.exe' } else { '{0}.dll' }) -f $asm)
+                $main = Join-Path $target ($(if ($fw.Name -eq 'net4' -or $singleGui) { '{0}.exe' } else { '{0}.dll' }) -f $asm)
                 if (Test-Path -LiteralPath $main) { $embedded.UnionWith((Get-CosturaEmbedded $main)) }
+                # no native library inside (Costura's costura32/costura64 unmanaged assemblies, or SQLite embedded as a
+                # resource, as SQLECmd did before): it would be written somewhere on the machine when the tool runs
+                if (-not $singleGui -and (Test-Path -LiteralPath $main)) {
+                    $nativeInside = @(Get-EmbeddedNatives $main)
+                    if ($nativeInside) {
+                        throw "$(Split-Path $main -Leaf) has native libraries inside, which it would extract when it runs: $(($nativeInside | Select-Object -First 4) -join ', ') (ship them as files next to it: Natives)"
+                    }
+                }
                 if ($costura -and $embedded.Count -eq 0) {
                     throw "$(Split-Path $main -Leaf) has no embedded dependencies (Costura did not run)"
                 }
@@ -865,7 +948,7 @@ function Invoke-Stage {
                 Write-Note ("To sign: {0} of {1} .exe/.dll/.ps1 (Eric's); {2} third-party, Microsoft or DevExpress left unsigned" -f
                     $toSign.Count, $entries.Count, ($entries.Count - $toSign.Count))
 
-                $note = if ($p.SingleFile -or $singleGui) { 'staged (single file)' } else { 'staged' }
+                $note = if ($singleGui) { 'staged (single file)' } else { 'staged' }
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = $note })
             }
             catch {
@@ -875,6 +958,12 @@ function Invoke-Stage {
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = "FAILED: $($_.Exception.Message)" })
             }
         }
+    }
+
+    # zips extracted into the same folder must not have different files at the same path (--zip refuses them too)
+    foreach ($c in @(Get-SharedPathConflicts $Out)) {
+        Write-Host "   $c" -ForegroundColor Red
+        $results.Add([pscustomobject]@{ Program = '(shared folder)'; Framework = '-'; Result = "FAILED: $c" })
     }
 
     $table = $results | Format-Table -AutoSize | Out-String -Width 220
@@ -1052,6 +1141,14 @@ function Invoke-Sign([string]$dir) {
 function Invoke-Zip([string]$staged, [string]$dest) {
     $staged = [IO.Path]::GetFullPath($staged)
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    # Get-ZimmermanTools.ps1 extracts the zips into one folder: one would overwrite another's file with different bytes
+    $conflicts = @(Get-SharedPathConflicts $staged)
+    if ($conflicts) {
+        $conflicts | ForEach-Object { Write-Host "   $_" -ForegroundColor Red }
+        Write-Host "Not zipping: files at the same path in zips extracted into the same folder differ (restage them from the same package versions)" -ForegroundColor Red
+        $script:failed = $true
+        return
+    }
     $count = 0
     foreach ($programDir in Get-ChildItem -LiteralPath $staged -Directory | Where-Object { $_.Name -notlike '_*' }) {
         $p = $programs | Where-Object { $_.Name -eq $programDir.Name } | Select-Object -First 1
