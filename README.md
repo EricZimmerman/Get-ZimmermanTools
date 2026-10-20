@@ -17,3 +17,5 @@ The script does not check for what is on disk, but uses what is in a CSV file th
 ```
 
 `Get-Help .\Build-ZimmermanTools.ps1 -Full` has the details. It needs the .NET 10 SDK, Visual Studio's MSBuild for old-style projects, the DevExpress NuGet feed for the programs with a window, and signtool for `--sign`.
+
+The command line tools carry their dependencies inside (Costura); the programs with a window don't (they start several times faster without it): each is staged and zipped in its own folder with its DLLs and `runtimes\` next to the exe, and staging fails if a file their `.deps.json` lists is missing.

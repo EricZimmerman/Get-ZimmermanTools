@@ -10,6 +10,9 @@
       - EvtxECmd, SQLECmd: their Maps; RECmd: BatchExamples and the registry plugins (Plugins)
       - Registry Explorer: the registry plugins, the bookmarks (RegistryExplorerBookmarks\Common), the manual
       - Timeline Explorer: the plugin DLLs (Plugins) and the layouts (Layouts\Default) from TLEFilePlugins
+      - The programs with a window have no Costura: their dependencies (every file their deps.json lists: dlls,
+        runtimes\...) are next to them in their own folder. The command line tools have theirs inside (Costura), and
+        AmcacheParser and WxTCmd are single files
       - Maps, batch files, bookmarks, the manual and the layouts are taken as committed (HEAD), byte for byte what
         GitHub has (and what --sync downloads), not from the working copy (CRLF on Windows); uncommitted changes in
         them are left out with a warning
@@ -181,7 +184,8 @@ if ($Clear) {
 # ---------------------------------------------------------------------------------------------------------------------
 # What each download zip has. Project: under -Root. Folder: the folder in the zip ($null: the files at the top).
 # Files: what is taken from the build output ({0} is the assembly name) besides the defaults (net4: {0}.exe;
-# others: {0}.exe, {0}.dll, {0}.runtimeconfig.json). Copy: repository folders/files -> paths in the staged program.
+# others: {0}.exe, {0}.dll, {0}.runtimeconfig.json; a project without Costura also its deps.json and every file it
+# lists, which needs a Folder). Copy: repository folders/files -> paths in the staged program.
 # Release: files only in the release zips. Special: steps for plugins and layouts. SingleFile: published as one exe
 # (framework dependent, win-x64, native libraries inside: the tools with SQLite, which have no Costura).
 # ---------------------------------------------------------------------------------------------------------------------
@@ -211,7 +215,7 @@ $programs = @(
     @{ Name = 'JumpListExplorer'; Project = 'jumplistexplorer\JumpListExplorer\JumpListExplorer.csproj'; Folder = 'JumpListExplorer'; Gui = $true; Release = @('LICENSE.txt') }
     @{ Name = 'MFTExplorer'; Project = 'MFTExplorer\MFTExplorer\MFTExplorer.csproj'; Folder = 'MFTExplorer'; Gui = $true; Release = @('LICENSE.txt') }
     @{ Name = 'RegistryExplorer'; Project = 'RegistryExplorer\RegistryViewerZ\RegistryViewerZ.csproj'; Folder = 'RegistryExplorer'; Gui = $true
-        Files = @('{0}.deps.json'); Copy = @{ 'RegistryExplorer\RegistryViewerZ\RegistryExplorerManual.pdf' = 'RegistryExplorerManual.pdf'; 'RegistryExplorerBookmarks\Common' = 'Bookmarks\Common' }
+        Copy = @{ 'RegistryExplorer\RegistryViewerZ\RegistryExplorerManual.pdf' = 'RegistryExplorerManual.pdf'; 'RegistryExplorerBookmarks\Common' = 'Bookmarks\Common' }
         Release = @('LICENSE.txt', 'Settings\*'); Special = 'RegistryPlugins'; EmptyDirs = @('Bookmarks\User') }
     @{ Name = 'SDBExplorer'; Project = 'sdbexplorer\SDBExplorer\SDBExplorer.csproj'; Folder = 'SDBExplorer'; Gui = $true; Release = @('LICENSE.txt') }
     @{ Name = 'ShellBagsExplorer'; Project = 'ShellBagsExplorer\ShellBagsExplorer2\ShellBagsExplorer2.csproj'; Folder = 'ShellBagsExplorer'; Gui = $true; Release = @('LICENSE.txt') }
@@ -409,6 +413,26 @@ function Get-CosturaEmbedded([string]$assembly) {
     return ,$names
 }
 
+# The files a deps.json says the program loads, relative to its folder as a build lays them out: runtime and native
+# assets next to it (by file name), runtimeTargets where their path says (runtimes\<rid>\...), resources in
+# <locale>\<file>. For every runtime identifier (the build is for any), so runtimes\unix\... too
+function Get-DepsAssets([string]$depsJson) {
+    $paths = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $deps = Get-Content -LiteralPath $depsJson -Raw | ConvertFrom-Json
+    $libraries = $deps.targets.($deps.runtimeTarget.name)
+    foreach ($lib in $libraries.PSObject.Properties) {
+        $v = $lib.Value
+        foreach ($kind in 'runtime', 'native') {
+            if ($v.$kind) { foreach ($a in $v.$kind.PSObject.Properties.Name) { [void]$paths.Add(($a -split '/')[-1]) } }
+        }
+        if ($v.runtimeTargets) { foreach ($a in $v.runtimeTargets.PSObject.Properties.Name) { [void]$paths.Add(($a -replace '/', '\')) } }
+        if ($v.resources) {
+            foreach ($r in $v.resources.PSObject.Properties) { [void]$paths.Add("$($r.Value.locale)\$(($r.Name -split '/')[-1])") }
+        }
+    }
+    return @($paths)
+}
+
 function Show-BuildErrors($output) {
     $errors = @($output | Select-String -Pattern ' error ' | Select-Object -First 10)
     if (-not $errors) { $errors = @($output | Select-Object -Last 15) }
@@ -534,6 +558,23 @@ function Invoke-Stage {
                     elseif ($name -notlike '*.runtimeconfig.json' -or $fw.Name -ne 'net4') { throw "'$name' is not in the build output" }
                 }
 
+                # no Costura (the programs with a window, Eric 2026-10-20: without it they start 2.5-5x faster and use
+                # about half the memory): the dependencies are files next to the program, every one its deps.json lists
+                # (dlls, runtimes\..., satellite folders), only in the program's own folder (Folder): programs extracted
+                # side by side into one download folder must never share or overwrite each other's dlls
+                $costura = (Get-Content -LiteralPath $project -Raw) -match 'Costura\.Fody'
+                $depsJson = Join-Path $buildDir "$asm.deps.json"
+                if (-not $costura -and $fw.Name -ne 'net4' -and -not $p.SingleFile -and $p.Folder -and (Test-Path -LiteralPath $depsJson)) {
+                    foreach ($rel in Get-DepsAssets $depsJson) {
+                        $src = Join-Path $buildDir $rel
+                        if (-not (Test-Path -LiteralPath $src)) { throw "'$rel' (in $asm.deps.json) is not in the build output" }
+                        $dest = Join-Path $target $rel
+                        New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+                        Copy-Item -LiteralPath $src -Destination $dest -Force
+                    }
+                    Copy-Item -LiteralPath $depsJson -Destination $target -Force
+                }
+
                 foreach ($k in @($p.Copy.Keys)) {
                     if ($k) { Copy-Into (Export-RepoPath $k) (Join-Path $target $p.Copy[$k]) }
                 }
@@ -579,8 +620,17 @@ function Invoke-Stage {
                 $embedded = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
                 $main = Join-Path $target ($(if ($fw.Name -eq 'net4' -or $p.SingleFile) { '{0}.exe' } else { '{0}.dll' }) -f $asm)
                 if (Test-Path -LiteralPath $main) { $embedded.UnionWith((Get-CosturaEmbedded $main)) }
-                if ((Get-Content -LiteralPath $project -Raw) -match 'Costura\.Fody' -and $embedded.Count -eq 0) {
+                if ($costura -and $embedded.Count -eq 0) {
                     throw "$(Split-Path $main -Leaf) has no embedded dependencies (Costura did not run)"
+                }
+
+                # a staged deps.json: every file it lists must be staged with it (the program doesn't start without them)
+                $stagedDeps = Join-Path $target "$asm.deps.json"
+                if (Test-Path -LiteralPath $stagedDeps) {
+                    $missingDeps = @(Get-DepsAssets $stagedDeps | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_)) })
+                    if ($missingDeps) {
+                        throw "$($missingDeps.Count) file(s) its deps.json lists are not staged: $(($missingDeps | Select-Object -First 4) -join ', ')"
+                    }
                 }
 
                 #(staged anywhere in the program: Timeline Explorer's plugins are in Plugins)
