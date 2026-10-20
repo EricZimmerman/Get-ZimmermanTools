@@ -10,9 +10,11 @@
       - EvtxECmd, SQLECmd: their Maps; RECmd: BatchExamples and the registry plugins (Plugins)
       - Registry Explorer: the registry plugins, the bookmarks (RegistryExplorerBookmarks\Common), the manual
       - Timeline Explorer: the plugin DLLs (Plugins) and the layouts (Layouts\Default) from TLEFilePlugins
-      - The programs with a window have no Costura: their dependencies (every file their deps.json lists: dlls,
-        runtimes\...) are next to them in their own folder. The command line tools have theirs inside (Costura), and
-        AmcacheParser and WxTCmd are single files
+      - The programs with a window are one exe each (.NET single file: framework dependent, win-x64; their managed
+        dependencies are inside it), in their own folder with what the publish leaves next to it: native dlls such as
+        sni.dll (never extracted to %TEMP%), <Program>.dll.config, content files (EZViewer's Extensions.yaml). No pdbs.
+        The command line tools stay cross platform: <Tool>.dll with its dependencies inside (Costura), run with
+        <Tool>.exe or dotnet <Tool>.dll; AmcacheParser and WxTCmd are single files (win-x64)
       - Maps, batch files, bookmarks, the manual and the layouts are taken as committed (HEAD), byte for byte what
         GitHub has (and what --sync downloads), not from the working copy (CRLF on Windows); uncommitted changes in
         them are left out with a warning
@@ -24,16 +26,23 @@
     programs, a copy of this script, _staged.txt and _sign.txt. The copy is replaced by every staging run, so the one in -Out is
     always the current one.
 
-    Command line tools are built with dotnet, programs with a window with Visual Studio's MSBuild (DevExpress licensing
-    and the old-style projects need it).
+    Command line tools are built with dotnet build, programs with a window published with dotnet publish
+    (-r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false); Visual
+    Studio's MSBuild only builds old-style projects and those that embed licenses.licx for it.
+
+    Checks: every dll the build made is staged or inside the program (Costura's resources, or a single file's bundle,
+    read from its manifest); a program with a window has every file its bundled deps.json lists inside the exe or next to
+    it, no managed dll loose next to it (they belong in the exe; plugins in Plugins excepted), and every file the publish
+    made (but pdbs) staged (next to the exe as published; Special may replace those in Plugins and Layouts).
 
     Get-ZimmermanTools.ps1 is staged too (<Out>\Get-ZimmermanTools\script), so it is signed and zipped with the rest;
     -Only Get-ZimmermanTools stages just the script.
 
     Staging also writes _sign.txt at the top of -Out: the files to sign, one path per line. Only Eric's: every .exe and
-    .ps1 of the programs, each program's own dll, the registry and Timeline Explorer plugins, and the dlls of his
-    projects and NuGet packages (a deps.json "project", or a package whose .nuspec in the NuGet cache names Eric
-    Zimmerman). Third-party dlls (Serilog, CsvHelper, ...), Microsoft's and DevExpress' are not listed. It is decided
+    .ps1 of the programs (a single-file exe is signed as a whole, its bundle with it), each program's own dll, the
+    registry and Timeline Explorer plugins, and the dlls of his projects and NuGet packages (a deps.json "project", or a
+    package whose .nuspec in the NuGet cache names Eric Zimmerman). Third-party dlls (Serilog, CsvHelper, ...),
+    Microsoft's (sni.dll) and DevExpress' are not listed. It is decided
     when staging, since the signing machine has no build output or NuGet cache; it is in no zip.
 
     Signing (-Sign <dir>, or --sign): signs the files _sign.txt lists with signtool.exe
@@ -193,10 +202,11 @@ if ($Clear) {
 # ---------------------------------------------------------------------------------------------------------------------
 # What each download zip has. Project: under -Root. Folder: the folder in the zip ($null: the files at the top).
 # Files: what is taken from the build output ({0} is the assembly name) besides the defaults (net4: {0}.exe;
-# others: {0}.exe, {0}.dll, {0}.runtimeconfig.json; a project without Costura also its deps.json and every file it
-# lists, which needs a Folder). Copy: repository folders/files -> paths in the staged program.
+# others: {0}.exe, {0}.dll, {0}.runtimeconfig.json). Gui with a Folder (.NET, not net4): published as one exe
+# (Test-SingleFileGui: framework dependent, win-x64, native libraries next to it) and staged as the publish output
+# without pdbs; Files are then only checked to be there. Copy: repository folders/files -> paths in the staged program.
 # Release: files only in the release zips. Special: steps for plugins and layouts. SingleFile: published as one exe
-# (framework dependent, win-x64, native libraries inside: the tools with SQLite, which have no Costura).
+# (framework dependent, win-x64, native libraries inside: the command line tools with SQLite, which have no Costura).
 # ---------------------------------------------------------------------------------------------------------------------
 $programs = @(
     @{ Name = 'AmcacheParser'; Project = 'AmcacheParser\AmcacheParser\AmcacheParser.csproj'; SingleFile = $true }
@@ -346,8 +356,23 @@ function Invoke-Indented([scriptblock]$block) {
     }
 }
 
+# A program with a window (in its own Folder, .NET): published as one exe (Eric, 2026-10-20), framework dependent,
+# win-x64, its managed dependencies inside, native dlls next to it (nothing is extracted to %TEMP%\.net when it runs).
+# Not the command line tools: they stay cross platform (dotnet <Tool>.dll), nor net4 builds or TimeApp (no Folder)
+function Test-SingleFileGui($p, $fw) {
+    return [bool]($p.Gui -and $p.Folder -and $fw.Name -ne 'net4' -and -not $fw.Old)
+}
+
 function Build-Program($p, $fw, [string]$buildDir) {
     $project = Join-Path $Root $p.Project
+    if (Test-SingleFileGui $p $fw) {
+        # the properties are given here, so the release doesn't depend on what the project file sets
+        if (Test-NeedsMSBuild $project $fw) { throw "it needs Visual Studio's MSBuild (licenses.licx), which this script doesn't publish with" }
+        $output = & dotnet publish $project -c Release -f $fw.Tfm -r win-x64 --self-contained false -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=false -o $buildDir --nologo -v quiet 2>&1
+        if ($LASTEXITCODE -ne 0) { Show-BuildErrors $output; throw "the publish failed" }
+        return $buildDir
+    }
     if (Test-NeedsMSBuild $project $fw) {
         # no global properties but Configuration: with OutDir or TargetFramework, MSBuild 18 ends with 0x4000001E while
         # it builds a referenced project. One build makes every framework, in the project's bin\Release\<tfm>
@@ -422,12 +447,65 @@ function Get-CosturaEmbedded([string]$assembly) {
     return ,$names
 }
 
+# The files inside a .NET single-file bundle (an exe PublishSingleFile made), from its manifest: the host has the
+# manifest's offset in the 8 bytes before a fixed 32-byte signature (0 there: a plain apphost, not a bundle). This is
+# what the exe really has (not what a build without single file would make): every bundled file with its path, and
+# the bundled deps.json, which lists what the program loads. $null for an exe that is not a bundle.
+# Returns {Version; Files = [{Path; Type (Assembly, Native, DepsJson, RuntimeConfigJson, Symbols); Size}]; DepsJson (text)}
+function Get-BundleManifest([string]$exe) {
+    $signature = [byte[]](0x8b, 0x12, 0x02, 0xb9, 0x6a, 0x61, 0x20, 0x38, 0x72, 0x7b, 0x93, 0x02, 0x14, 0xd7, 0xa0, 0x32,
+        0x13, 0xf5, 0xb9, 0xe6, 0xef, 0xae, 0x33, 0x18, 0xee, 0x3b, 0x2d, 0xce, 0x24, 0xb3, 0x6a, 0xae)
+    #(one byte per character: a fast ordinal search of the bytes)
+    $latin1 = [Text.Encoding]::GetEncoding(28591)
+    $fs = [IO.File]::OpenRead($exe)
+    try {
+        # the signature is in the host, at the start of the file (the bundled files follow it)
+        $head = New-Object byte[] ([Math]::Min($fs.Length, 32MB))
+        $read = 0
+        while ($read -lt $head.Length) { $n = $fs.Read($head, $read, $head.Length - $read); if ($n -le 0) { break }; $read += $n }
+        $at = $latin1.GetString($head, 0, $read).IndexOf($latin1.GetString($signature), [StringComparison]::Ordinal)
+        if ($at -lt 8) { return $null }
+        $headerOffset = [BitConverter]::ToInt64($head, $at - 8)
+        if ($headerOffset -le 0 -or $headerOffset -ge $fs.Length) { return $null }
+
+        # the header (major and minor version, file count, bundle id, then since version 2 the deps.json's and
+        # runtimeconfig.json's offset and size and the flags), then each file: offset, size, compressed size (version
+        # 6+), type, path (a length-prefixed UTF-8 string, as BinaryReader reads it)
+        $null = $fs.Seek($headerOffset, [IO.SeekOrigin]::Begin)
+        $r = New-Object IO.BinaryReader($fs, [Text.Encoding]::UTF8, $true)
+        $major = $r.ReadUInt32(); $null = $r.ReadUInt32()
+        $count = $r.ReadInt32(); $null = $r.ReadString()
+        $depsOffset = 0; $depsSize = 0
+        if ($major -ge 2) {
+            $depsOffset = $r.ReadInt64(); $depsSize = $r.ReadInt64()
+            $null = $r.ReadInt64(); $null = $r.ReadInt64(); $null = $r.ReadUInt64()
+        }
+        $types = @('Unknown', 'Assembly', 'Native', 'DepsJson', 'RuntimeConfigJson', 'Symbols')
+        $files = for ($i = 0; $i -lt $count; $i++) {
+            $null = $r.ReadInt64(); $size = $r.ReadInt64()
+            $compressed = if ($major -ge 6) { $r.ReadInt64() } else { 0 }
+            $type = $r.ReadByte()
+            $path = $r.ReadString() -replace '/', '\'
+            [pscustomobject]@{ Path = $path; Type = $(if ($type -lt $types.Count) { $types[$type] } else { "$type" }); Size = $size; Compressed = $compressed }
+        }
+        $deps = $null
+        if ($depsSize -gt 0 -and -not @($files | Where-Object { $_.Type -eq 'DepsJson' -and $_.Compressed -gt 0 })) {
+            $null = $fs.Seek($depsOffset, [IO.SeekOrigin]::Begin)
+            $deps = [Text.Encoding]::UTF8.GetString($r.ReadBytes([int]$depsSize))
+        }
+        return [pscustomobject]@{ Version = $major; Files = @($files); DepsJson = $deps }
+    }
+    finally { $fs.Dispose() }
+}
+
 # The files a deps.json says the program loads, relative to its folder as a build lays them out: runtime and native
 # assets next to it (by file name), runtimeTargets where their path says (runtimes\<rid>\...), resources in
-# <locale>\<file>. For every runtime identifier (the build is for any), so runtimes\unix\... too
-function Get-DepsAssets([string]$depsJson) {
+# <locale>\<file>. For every runtime identifier (the build is for any), so runtimes\unix\... too. -Text: the deps.json's
+# text instead of its file (a single file's, from its bundle)
+function Get-DepsAssets([string]$depsJson, [string]$Text) {
     $paths = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-    $deps = Get-Content -LiteralPath $depsJson -Raw | ConvertFrom-Json
+    if (-not $Text) { $Text = Get-Content -LiteralPath $depsJson -Raw }
+    $deps = $Text | ConvertFrom-Json
     $libraries = $deps.targets.($deps.runtimeTarget.name)
     foreach ($lib in $libraries.PSObject.Properties) {
         $v = $lib.Value
@@ -642,31 +720,35 @@ function Invoke-Stage {
                 $buildDir = Build-Program $p $fw $buildDir
                 New-Item -ItemType Directory -Force $target | Out-Null
 
-                #(@(): a one-item array from an if is unrolled to a string, and += then appends to the string)
-                $files = @(if ($fw.Name -eq 'net4' -or $p.SingleFile) { '{0}.exe' } else { '{0}.exe', '{0}.dll', '{0}.runtimeconfig.json' })
-                $files += @($p.Files)
-                foreach ($f in $files | Where-Object { $_ }) {
-                    $name = $f -f $asm
-                    $src = Join-Path $buildDir $name
-                    if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Force }
-                    elseif ($name -notlike '*.runtimeconfig.json' -or $fw.Name -ne 'net4') { throw "'$name' is not in the build output" }
-                }
-
-                # no Costura (the programs with a window, Eric 2026-10-20: without it they start 2.5-5x faster and use
-                # about half the memory): the dependencies are files next to the program, every one its deps.json lists
-                # (dlls, runtimes\..., satellite folders), only in the program's own folder (Folder): programs extracted
-                # side by side into one download folder must never share or overwrite each other's dlls
+                $singleGui = Test-SingleFileGui $p $fw
                 $costura = (Get-Content -LiteralPath $project -Raw) -match 'Costura\.Fody'
                 $depsJson = Join-Path $buildDir "$asm.deps.json"
-                if (-not $costura -and $fw.Name -ne 'net4' -and -not $p.SingleFile -and $p.Folder -and (Test-Path -LiteralPath $depsJson)) {
-                    foreach ($rel in Get-DepsAssets $depsJson) {
-                        $src = Join-Path $buildDir $rel
-                        if (-not (Test-Path -LiteralPath $src)) { throw "'$rel' (in $asm.deps.json) is not in the build output" }
-                        $dest = Join-Path $target $rel
-                        New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
-                        Copy-Item -LiteralPath $src -Destination $dest -Force
+                if ($singleGui) {
+                    # a program with a window (Eric, 2026-10-20): the publish output as it is, the exe (its managed
+                    # dependencies inside) and what the publish leaves next to it (native dlls such as sni.dll,
+                    # {0}.dll.config, content files), in its own Folder; no pdbs (the release zips never had any)
+                    if ($costura) { throw "the project still has Costura.Fody (a program with a window is a single file without it)" }
+                    foreach ($f in @('{0}.exe') + @($p.Files) | Where-Object { $_ }) {
+                        if (-not (Test-Path -LiteralPath (Join-Path $buildDir ($f -f $asm)))) { throw "'$($f -f $asm)' is not in the publish output" }
                     }
-                    Copy-Item -LiteralPath $depsJson -Destination $target -Force
+                    $published = @(Get-ChildItem -LiteralPath $buildDir -Recurse -File | Where-Object Extension -ne '.pdb')
+                    foreach ($f in $published) {
+                        $dest = Join-Path $target $f.FullName.Substring($buildDir.TrimEnd('\').Length + 1)
+                        New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+                        Copy-Item -LiteralPath $f.FullName -Destination $dest -Force
+                    }
+                    $depsJson = $null
+                }
+                else {
+                    #(@(): a one-item array from an if is unrolled to a string, and += then appends to the string)
+                    $files = @(if ($fw.Name -eq 'net4' -or $p.SingleFile) { '{0}.exe' } else { '{0}.exe', '{0}.dll', '{0}.runtimeconfig.json' })
+                    $files += @($p.Files)
+                    foreach ($f in $files | Where-Object { $_ }) {
+                        $name = $f -f $asm
+                        $src = Join-Path $buildDir $name
+                        if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $target -Force }
+                        elseif ($name -notlike '*.runtimeconfig.json' -or $fw.Name -ne 'net4') { throw "'$name' is not in the build output" }
+                    }
                 }
 
                 foreach ($k in @($p.Copy.Keys)) {
@@ -709,22 +791,58 @@ function Invoke-Stage {
                     }
                 }
 
-                # every dll the build made must be in the program: staged next to it, or embedded by Costura (a build
-                # without either can't run: the dependencies would be missing)
+                # every dll the build made must be in the program: staged next to it, or embedded by Costura or in the
+                # single file's bundle (a build without either can't run: the dependencies would be missing)
                 $embedded = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-                $main = Join-Path $target ($(if ($fw.Name -eq 'net4' -or $p.SingleFile) { '{0}.exe' } else { '{0}.dll' }) -f $asm)
+                $main = Join-Path $target ($(if ($fw.Name -eq 'net4' -or $p.SingleFile -or $singleGui) { '{0}.exe' } else { '{0}.dll' }) -f $asm)
                 if (Test-Path -LiteralPath $main) { $embedded.UnionWith((Get-CosturaEmbedded $main)) }
                 if ($costura -and $embedded.Count -eq 0) {
                     throw "$(Split-Path $main -Leaf) has no embedded dependencies (Costura did not run)"
                 }
 
-                # a staged deps.json: every file it lists must be staged with it (the program doesn't start without them)
-                $stagedDeps = Join-Path $target "$asm.deps.json"
-                if (Test-Path -LiteralPath $stagedDeps) {
-                    $missingDeps = @(Get-DepsAssets $stagedDeps | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_)) })
+                if ($singleGui) {
+                    # the exe is a single file: its bundle (read from its manifest, so this is what the exe really has)
+                    # has the managed dependencies and the deps.json that lists everything the program loads
+                    $bundle = Get-BundleManifest $main
+                    if (-not $bundle) { throw "$(Split-Path $main -Leaf) is not a single file (no bundle in it)" }
+                    if (-not $bundle.DepsJson) { throw "$(Split-Path $main -Leaf) has no deps.json in its bundle" }
+                    foreach ($b in $bundle.Files) { [void]$embedded.Add((Split-Path $b.Path -Leaf)) }
+                    $inBundle = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+                    foreach ($b in $bundle.Files) { [void]$inBundle.Add($b.Path) }
+
+                    # every file the deps.json lists is in the bundle or next to the exe (it doesn't start without them)
+                    $missingDeps = @(Get-DepsAssets -Text $bundle.DepsJson | Where-Object {
+                            -not $inBundle.Contains($_) -and -not (Test-Path -LiteralPath (Join-Path $target $_)) })
                     if ($missingDeps) {
-                        throw "$($missingDeps.Count) file(s) its deps.json lists are not staged: $(($missingDeps | Select-Object -First 4) -join ', ')"
+                        throw "$($missingDeps.Count) file(s) its deps.json lists are neither in the exe nor next to it: $(($missingDeps | Select-Object -First 4) -join ', ')"
                     }
+
+                    # every file the publish made (native dlls, the config, content) is staged; those next to the exe as
+                    # published. In subfolders the table's steps may have replaced them: Timeline Explorer's project
+                    # puts its plugins and the working copy's layouts next to the publish, Special stages the plugins
+                    # CopyPlugins built and the layouts as committed
+                    $notStaged = @($published | Where-Object {
+                            $rel = $_.FullName.Substring($buildDir.TrimEnd('\').Length + 1)
+                            $dest = Join-Path $target $rel
+                            -not (Test-Path -LiteralPath $dest) -or ($rel -notmatch '\\' -and (Get-Item -LiteralPath $dest).Length -ne $_.Length)
+                        } | ForEach-Object Name)
+                    if ($notStaged) {
+                        throw "$($notStaged.Count) file(s) of the publish are not staged as published: $(($notStaged | Select-Object -First 4) -join ', ')"
+                    }
+
+                    # no managed dll loose in the program (it belongs in the exe; a copy next to it could be loaded
+                    # instead): only native ones. The plugins (Plugins\) are loaded from their files
+                    $loose = @(Get-ChildItem -LiteralPath $target -Recurse -File -Filter *.dll | Where-Object {
+                            $_.FullName.Substring($target.TrimEnd('\').Length + 1) -notlike 'Plugins\*' } | Where-Object {
+                            $fs = [IO.File]::OpenRead($_.FullName)
+                            try { ([System.Reflection.PortableExecutable.PEReader]::new($fs)).HasMetadata } catch { $false } finally { $fs.Dispose() }
+                        })
+                    if ($loose) {
+                        throw "$($loose.Count) managed dll(s) next to the single file (they belong inside it): $(($loose | ForEach-Object { $_.FullName.Substring($target.TrimEnd('\').Length + 1) } | Select-Object -First 4) -join ', ')"
+                    }
+                    $natives = @(Get-ChildItem -LiteralPath $target -File -Filter *.dll | ForEach-Object Name)
+                    Write-Note ("Single file: {0} ({1:N1} MB, {2} files inside); next to it: {3}" -f (Split-Path $main -Leaf),
+                        ((Get-Item -LiteralPath $main).Length / 1MB), $bundle.Files.Count, $(if ($natives) { $natives -join ', ' } else { 'no native dll' }))
                 }
 
                 #(staged anywhere in the program: Timeline Explorer's plugins are in Plugins)
@@ -746,7 +864,7 @@ function Invoke-Stage {
                 Write-Note ("To sign: {0} of {1} .exe/.dll/.ps1 (Eric's); {2} third-party, Microsoft or DevExpress left unsigned" -f
                     $toSign.Count, $entries.Count, ($entries.Count - $toSign.Count))
 
-                $note = if ($p.SingleFile) { 'staged (single file)' } else { 'staged' }
+                $note = if ($p.SingleFile -or $singleGui) { 'staged (single file)' } else { 'staged' }
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = $note })
             }
             catch {
