@@ -356,11 +356,12 @@ function Invoke-Indented([scriptblock]$block) {
     }
 }
 
-# A program with a window (in its own Folder, .NET): published as one exe (Eric, 2026-10-20), framework dependent,
-# win-x64, its managed dependencies inside, native dlls next to it (nothing is extracted to %TEMP%\.net when it runs).
-# Not the command line tools: they stay cross platform (dotnet <Tool>.dll), nor net4 builds or TimeApp (no Folder)
+# A program with a window (.NET): published as one exe (Eric, 2026-10-20), framework dependent, win-x64, its managed
+# dependencies inside, native dlls next to it (nothing is extracted to %TEMP%\.net when it runs). TimeApp too (no
+# Folder: TimeApp.exe at the top of its zip). Not the command line tools: they stay cross platform (dotnet <Tool>.dll),
+# nor net4 builds
 function Test-SingleFileGui($p, $fw) {
-    return [bool]($p.Gui -and $p.Folder -and $fw.Name -ne 'net4' -and -not $fw.Old)
+    return [bool]($p.Gui -and $fw.Name -ne 'net4' -and -not $fw.Old)
 }
 
 function Build-Program($p, $fw, [string]$buildDir) {
