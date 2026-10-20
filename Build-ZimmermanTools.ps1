@@ -291,7 +291,7 @@ function Get-ReleaseFile([string]$program, [string]$framework, [string]$pattern,
     $net = $framework -ne 'net4'
     $url = $script:releaseUrls | Where-Object { ([uri]$_).Segments[-1] -ieq "$program.zip" -and (($_ -match '/net\d*/') -eq $net) } | Select-Object -First 1
     if (-not $url) {
-        # a program that is new for this framework (Hasher for .NET 10): the other framework's zip
+        # a program that is new for this framework (as Hasher and TimeApp were for .NET 10): the other framework's zip
         $url = $script:releaseUrls | Where-Object { ([uri]$_).Segments[-1] -ieq "$program.zip" } | Select-Object -First 1
     }
     if (-not $url) { Write-Warning "${program}: no release zip to take '$pattern' from"; return @() }
@@ -753,6 +753,19 @@ function Invoke-Zip([string]$staged, [string]$dest) {
             }
             Write-Host "  $zipFile"
             $count++
+        }
+
+        # a zip left from a framework the program isn't built for any more (Hasher, AmcacheParser and XWFIM have no
+        # .NET Framework build): reported, not deleted (the destination is often the download share)
+        $frameworks = @(Get-ChildItem -LiteralPath $programDir.FullName -Directory | ForEach-Object Name)
+        $hasTop = @($frameworks | Where-Object { $_ -in @('net4', 'script') }).Count -gt 0
+        $hasNet = @($frameworks | Where-Object { $_ -notin @('net4', 'script') }).Count -gt 0
+        foreach ($stale in @(
+                $(if (-not $hasTop) { Join-Path $dest "$zipName.zip" }),
+                $(if (-not $hasNet) { Join-Path (Join-Path $dest 'net') "$zipName.zip" })) | Where-Object { $_ }) {
+            if (Test-Path -LiteralPath $stale) {
+                Write-Warning "$stale is left from a build $($programDir.Name) doesn't have any more: delete it (and its link on the download page)"
+            }
         }
     }
     Write-Host "$count zip(s) in $dest"
