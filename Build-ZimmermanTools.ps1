@@ -38,7 +38,11 @@
     made (but pdbs) staged (next to the exe as published; Special may replace those in Plugins and Layouts). The zips
     that Get-ZimmermanTools.ps1 extracts into the same folder (the .NET 10 ones into net\, the .NET Framework ones at
     the top) must not have a file at the same path with different contents (AmcacheParser and WxTCmd both have
-    e_sqlite3.dll at the top): staging and --zip fail if they do.
+    e_sqlite3.dll at the top): staging and --zip fail if they do. Pdbs are embedded in the assemblies (each
+    repository's Directory.Build.props): a .pdb file staged in a program fails it, and a program whose own assembly
+    (a command line tool's <Tool>.dll or net4 <Tool>.exe, a single file's <Program>.dll read from its bundle) has no
+    embedded pdb (no file and line numbers in its stack traces), or one with this machine's source paths (the
+    repositories', the profile's, %TEMP%'s) instead of /_/..., gets a warning; it is still staged.
 
     Get-ZimmermanTools.ps1 is staged too (<Out>\Get-ZimmermanTools\script), so it is signed and zipped with the rest;
     -Only Get-ZimmermanTools stages just the script.
@@ -512,11 +516,11 @@ function Get-BundleManifest([string]$exe) {
         }
         $types = @('Unknown', 'Assembly', 'Native', 'DepsJson', 'RuntimeConfigJson', 'Symbols')
         $files = for ($i = 0; $i -lt $count; $i++) {
-            $null = $r.ReadInt64(); $size = $r.ReadInt64()
+            $offset = $r.ReadInt64(); $size = $r.ReadInt64()
             $compressed = if ($major -ge 6) { $r.ReadInt64() } else { 0 }
             $type = $r.ReadByte()
             $path = $r.ReadString() -replace '/', '\'
-            [pscustomobject]@{ Path = $path; Type = $(if ($type -lt $types.Count) { $types[$type] } else { "$type" }); Size = $size; Compressed = $compressed }
+            [pscustomobject]@{ Path = $path; Type = $(if ($type -lt $types.Count) { $types[$type] } else { "$type" }); Size = $size; Compressed = $compressed; Offset = $offset }
         }
         $deps = $null
         if ($depsSize -gt 0 -and -not @($files | Where-Object { $_.Type -eq 'DepsJson' -and $_.Compressed -gt 0 })) {
@@ -526,6 +530,54 @@ function Get-BundleManifest([string]$exe) {
         return [pscustomobject]@{ Version = $major; Files = @($files); DepsJson = $deps }
     }
     finally { $fs.Dispose() }
+}
+
+# One file inside a single-file bundle (an entry of Get-BundleManifest's Files), as bytes: stored as it is, or
+# deflated (EnableCompressionInSingleFile)
+function Get-BundleFileBytes([string]$exe, $entry) {
+    $fs = [IO.File]::OpenRead($exe)
+    try {
+        $null = $fs.Seek($entry.Offset, [IO.SeekOrigin]::Begin)
+        $r = New-Object IO.BinaryReader($fs)
+        if ($entry.Compressed -le 0) { return ,$r.ReadBytes([int]$entry.Size) }
+        $packed = New-Object IO.MemoryStream (, $r.ReadBytes([int]$entry.Compressed))
+        $inflate = New-Object IO.Compression.DeflateStream($packed, [IO.Compression.CompressionMode]::Decompress)
+        $bytes = New-Object IO.MemoryStream
+        $inflate.CopyTo($bytes)
+        $inflate.Dispose()
+        return ,$bytes.ToArray()
+    }
+    finally { $fs.Dispose() }
+}
+
+# Whether an assembly (a file, or its bytes) carries its pdb inside (DebugType embedded: stack traces with file and line
+# numbers, no .pdb file to ship), and whether that pdb's source paths are deterministic (/_/..., ContinuousIntegrationBuild)
+# rather than this machine's folders: LocalPaths counts the documents under one of $LocalRoots (the repositories, the
+# user profile with the NuGet cache, %TEMP%). Other paths are not this machine's: Costura adds its template's sources with
+# Fody's own build paths (C:\CI_WS\...), and Visual Basic an unnamed document.
+# Returns {Embedded; Documents; LocalPaths (count); FirstLocal; CodeView}
+function Get-EmbeddedPdbInfo($assembly, [string[]]$LocalRoots) {
+    $stream = if ($assembly -is [byte[]]) { New-Object IO.MemoryStream (, $assembly) } else { [IO.File]::OpenRead($assembly) }
+    try {
+        $pe = [System.Reflection.PortableExecutable.PEReader]::new($stream)
+        if (-not $pe.HasMetadata) { return $null }
+        $entries = $pe.ReadDebugDirectory()
+        $emb = $entries | Where-Object { $_.Type -eq [System.Reflection.PortableExecutable.DebugDirectoryEntryType]::EmbeddedPortablePdb } | Select-Object -First 1
+        if (-not $emb) {
+            $cv = $entries | Where-Object { $_.Type -eq [System.Reflection.PortableExecutable.DebugDirectoryEntryType]::CodeView } | Select-Object -First 1
+            return [pscustomobject]@{ Embedded = $false; Documents = 0; LocalPaths = 0; FirstLocal = $null
+                CodeView = $(if ($cv) { $pe.ReadCodeViewDebugDirectoryData($cv).Path } else { $null }) }
+        }
+        $provider = $pe.ReadEmbeddedPortablePdbDebugDirectoryData($emb)
+        try {
+            $md = $provider.GetMetadataReader()
+            $docs = @(foreach ($h in $md.Documents) { $md.GetString($md.GetDocument($h).Name) })
+            $local = @($docs | Where-Object { $d = $_; @($LocalRoots | Where-Object { $_ -and $d.StartsWith($_.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 })
+            return [pscustomobject]@{ Embedded = $true; Documents = $docs.Count; LocalPaths = $local.Count; FirstLocal = $(if ($local) { $local[0] }); CodeView = $null }
+        }
+        finally { $provider.Dispose() }
+    }
+    finally { $stream.Dispose() }
 }
 
 # The files a deps.json says the program loads, relative to its folder as a build lays them out: runtime and native
@@ -937,6 +989,40 @@ function Invoke-Stage {
                 if ($missing) {
                     throw "$($missing.Count) dll(s) of the build are neither embedded nor staged: $(($missing.Name | Select-Object -First 4) -join ', ')"
                 }
+
+                # no .pdb in the program: the pdbs are inside the assemblies (DebugType embedded in each repository's
+                # Directory.Build.props, Eric 2026-10-20), and no release zip ever had a .pdb
+                $pdbs = @(Get-ChildItem -LiteralPath $stage -Recurse -File -Filter *.pdb)
+                if ($pdbs) {
+                    throw "$($pdbs.Count) .pdb file(s) staged (pdbs are embedded, none ships): $(($pdbs | ForEach-Object { $_.FullName.Substring($stage.TrimEnd('\').Length + 1) } | Select-Object -First 4) -join ', ')"
+                }
+
+                # the program's own assembly carries its pdb, with /_/ source paths (ContinuousIntegrationBuild), so
+                # stack traces and Exceptionless reports have file and line numbers. A warning, not a failure: the program
+                # works without it. A single file's own dll is read from its bundle; a command line tool's is its
+                # {0}.dll (.NET) or {0}.exe (net4)
+                $pdbWarning = $null
+                $own = $main
+                $ownName = Split-Path $main -Leaf
+                if ($singleGui) {
+                    $ownName = "$asm.dll"
+                    $entry = $bundle.Files | Where-Object { $_.Type -eq 'Assembly' -and $_.Path -eq $ownName } | Select-Object -First 1
+                    $own = if ($entry) { Get-BundleFileBytes $main $entry } else { $null }
+                    $ownName = "$ownName in $(Split-Path $main -Leaf)"
+                }
+                $localRoots = @([IO.Path]::GetFullPath($Root), $env:USERPROFILE, [IO.Path]::GetTempPath())
+                $pdbInfo = if ($own -is [byte[]] -or ($own -and (Test-Path -LiteralPath $own))) { Get-EmbeddedPdbInfo $own $localRoots } else { $null }
+                if (-not $pdbInfo) {
+                    $pdbWarning = "$ownName not found to check for an embedded pdb"
+                }
+                elseif (-not $pdbInfo.Embedded) {
+                    $pdbWarning = "$ownName has no embedded pdb (no file and line numbers in stack traces; DebugType embedded in the repository's Directory.Build.props)"
+                }
+                elseif ($pdbInfo.LocalPaths -gt 0) {
+                    $pdbWarning = "$ownName has an embedded pdb with $($pdbInfo.LocalPaths) of this machine's source path(s), such as $($pdbInfo.FirstLocal) (ContinuousIntegrationBuild for Release makes them /_/...)"
+                }
+                if ($pdbWarning) { Write-Warning "$($p.Name) $($fw.Name): $pdbWarning" }
+                else { Write-Note "Embedded pdb: $ownName ($($pdbInfo.Documents) source files, none under this machine's folders)" }
                 # what --sign signs (decided here: the signing machine has no build output or NuGet cache)
                 $pluginNames = @(switch ($p.Special) {
                         'RegistryPlugins' { Get-ChildItem -LiteralPath $registryPlugins -Filter *.dll -File | ForEach-Object Name }
@@ -949,6 +1035,7 @@ function Invoke-Stage {
                     $toSign.Count, $entries.Count, ($entries.Count - $toSign.Count))
 
                 $note = if ($singleGui) { 'staged (single file)' } else { 'staged' }
+                if ($pdbWarning) { $note += $(if ($pdbInfo -and $pdbInfo.Embedded) { '; warning: local paths in its pdb' } else { '; warning: no embedded pdb' }) }
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = $note })
             }
             catch {
