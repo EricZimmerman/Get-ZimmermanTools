@@ -20,7 +20,8 @@
       - Maps, batch files, bookmarks, the manual and the layouts are taken as committed (HEAD), byte for byte what
         GitHub has (and what --sync downloads), not from the working copy (CRLF on Windows); uncommitted changes in
         them are left out with a warning
-      - Files that are not in any repository (the GUIs' LICENSE.txt, iisGeolocate's GeoLite2-City.mmdb, Registry
+      - The GUIs' LICENSE.txt is taken from each GUI's repository (as committed, like the maps)
+      - Files that are not in any repository (iisGeolocate's GeoLite2-City.mmdb, Registry
         Explorer's default Settings, XWFIM's text files) are taken from the current release zips, downloaded once
         (from the page Get-ZimmermanTools.ps1 reads) into %TEMP%\Build-ZimmermanTools\_release
 
@@ -42,7 +43,7 @@
     repository's Directory.Build.props): a .pdb file staged in a program fails it, and a program whose own assembly
     (a command line tool's <Tool>.dll or net4 <Tool>.exe, a single file's <Program>.dll read from its bundle) has no
     embedded pdb (no file and line numbers in its stack traces), or one with this machine's source paths (the
-    repositories', the profile's, %TEMP%'s) instead of /_/..., gets a warning; it is still staged.
+    repositories', the profile's, %TEMP%'s) instead of /_/..., fails too.
 
     Get-ZimmermanTools.ps1 is staged too (<Out>\Get-ZimmermanTools\script), so it is signed and zipped with the rest;
     -Only Get-ZimmermanTools stages just the script.
@@ -251,17 +252,18 @@ $programs = @(
     @{ Name = 'VSCMount'; Project = 'vscmount\VSCMount\VSCMount.csproj' }
     @{ Name = 'WxTCmd'; Project = 'WxTCmd\WxTCmd\WxTCmd.csproj'; Natives = $sqlitePclNatives }
 
-    @{ Name = 'EZViewer'; Project = 'EZViewer\EZViewer\EZViewer.csproj'; Folder = 'EZViewer'; Gui = $true; Files = @('Extensions.yaml'); Release = @('LICENSE.txt') }
-    @{ Name = 'Hasher'; Project = 'Hasher\Hasher2\Hasher2.vbproj'; Folder = 'Hasher'; Gui = $true; Release = @('LICENSE.txt'); ZipName = 'hasher' }
-    @{ Name = 'JumpListExplorer'; Project = 'jumplistexplorer\JumpListExplorer\JumpListExplorer.csproj'; Folder = 'JumpListExplorer'; Gui = $true; Release = @('LICENSE.txt') }
-    @{ Name = 'MFTExplorer'; Project = 'MFTExplorer\MFTExplorer\MFTExplorer.csproj'; Folder = 'MFTExplorer'; Gui = $true; Release = @('LICENSE.txt') }
+    # the GUIs' LICENSE.txt is in each repository (Eric, 2026-10-22); it came from the release zips before
+    @{ Name = 'EZViewer'; Project = 'EZViewer\EZViewer\EZViewer.csproj'; Folder = 'EZViewer'; Gui = $true; Files = @('Extensions.yaml'); Copy = @{ 'EZViewer\LICENSE.txt' = 'LICENSE.txt' } }
+    @{ Name = 'Hasher'; Project = 'Hasher\Hasher2\Hasher2.vbproj'; Folder = 'Hasher'; Gui = $true; Copy = @{ 'Hasher\LICENSE.txt' = 'LICENSE.txt' }; ZipName = 'hasher' }
+    @{ Name = 'JumpListExplorer'; Project = 'jumplistexplorer\JumpListExplorer\JumpListExplorer.csproj'; Folder = 'JumpListExplorer'; Gui = $true; Copy = @{ 'jumplistexplorer\LICENSE.txt' = 'LICENSE.txt' } }
+    @{ Name = 'MFTExplorer'; Project = 'MFTExplorer\MFTExplorer\MFTExplorer.csproj'; Folder = 'MFTExplorer'; Gui = $true; Copy = @{ 'MFTExplorer\LICENSE.txt' = 'LICENSE.txt' } }
     @{ Name = 'RegistryExplorer'; Project = 'RegistryExplorer\RegistryViewerZ\RegistryViewerZ.csproj'; Folder = 'RegistryExplorer'; Gui = $true
-        Copy = @{ 'RegistryExplorer\RegistryViewerZ\RegistryExplorerManual.pdf' = 'RegistryExplorerManual.pdf'; 'RegistryExplorerBookmarks\Common' = 'Bookmarks\Common' }
-        Release = @('LICENSE.txt', 'Settings\*'); Special = 'RegistryPlugins'; EmptyDirs = @('Bookmarks\User') }
-    @{ Name = 'SDBExplorer'; Project = 'sdbexplorer\SDBExplorer\SDBExplorer.csproj'; Folder = 'SDBExplorer'; Gui = $true; Release = @('LICENSE.txt') }
-    @{ Name = 'ShellBagsExplorer'; Project = 'ShellBagsExplorer\ShellBagsExplorer2\ShellBagsExplorer2.csproj'; Folder = 'ShellBagsExplorer'; Gui = $true; Release = @('LICENSE.txt') }
-    @{ Name = 'TimelineExplorer'; Project = 'timelineexplorer\TimelineExplorer\TimelineExplorer.csproj'; Folder = 'TimelineExplorer'; Gui = $true; Release = @('LICENSE.txt'); Special = 'TlePlugins' }
-    @{ Name = 'XWFIM'; Project = 'XWFIM\XWFIM\XWFIM.csproj'; Folder = 'XWFIM'; Gui = $true; Release = @('LICENSE.txt', 'READ ME NOW. No seriously, READ THIS NOW!!!!.txt', 'Urls.txt') }
+        Copy = @{ 'RegistryExplorer\RegistryViewerZ\RegistryExplorerManual.pdf' = 'RegistryExplorerManual.pdf'; 'RegistryExplorerBookmarks\Common' = 'Bookmarks\Common'; 'RegistryExplorer\LICENSE.txt' = 'LICENSE.txt' }
+        Release = @('Settings\*'); Special = 'RegistryPlugins'; EmptyDirs = @('Bookmarks\User') }
+    @{ Name = 'SDBExplorer'; Project = 'sdbexplorer\SDBExplorer\SDBExplorer.csproj'; Folder = 'SDBExplorer'; Gui = $true; Copy = @{ 'sdbexplorer\LICENSE.txt' = 'LICENSE.txt' } }
+    @{ Name = 'ShellBagsExplorer'; Project = 'ShellBagsExplorer\ShellBagsExplorer2\ShellBagsExplorer2.csproj'; Folder = 'ShellBagsExplorer'; Gui = $true; Copy = @{ 'ShellBagsExplorer\LICENSE.txt' = 'LICENSE.txt' } }
+    @{ Name = 'TimelineExplorer'; Project = 'timelineexplorer\TimelineExplorer\TimelineExplorer.csproj'; Folder = 'TimelineExplorer'; Gui = $true; Copy = @{ 'timelineexplorer\LICENSE.txt' = 'LICENSE.txt' }; Special = 'TlePlugins' }
+    @{ Name = 'XWFIM'; Project = 'XWFIM\XWFIM\XWFIM.csproj'; Folder = 'XWFIM'; Gui = $true; Copy = @{ 'XWFIM\LICENSE.txt' = 'LICENSE.txt' }; Release = @('READ ME NOW. No seriously, READ THIS NOW!!!!.txt', 'Urls.txt') }
     @{ Name = 'TimeApp'; Project = 'timeapp\timeapp\timeapp.csproj'; Gui = $true }
     @{ Name = 'Get-ZimmermanTools'; Script = 'get-zimmermantools\Get-ZimmermanTools.ps1' }
 )
@@ -998,8 +1000,8 @@ function Invoke-Stage {
                 }
 
                 # the program's own assembly carries its pdb, with /_/ source paths (ContinuousIntegrationBuild), so
-                # stack traces and Exceptionless reports have file and line numbers. A warning, not a failure: the program
-                # works without it. A single file's own dll is read from its bundle; a command line tool's is its
+                # stack traces and Exceptionless reports have file and line numbers. A failure (Eric, 2026-10-22, after a
+                # clean full staging run had none): every repository has the setting. A single file's own dll is read from its bundle; a command line tool's is its
                 # {0}.dll (.NET) or {0}.exe (net4)
                 $pdbWarning = $null
                 $own = $main
@@ -1021,8 +1023,8 @@ function Invoke-Stage {
                 elseif ($pdbInfo.LocalPaths -gt 0) {
                     $pdbWarning = "$ownName has an embedded pdb with $($pdbInfo.LocalPaths) of this machine's source path(s), such as $($pdbInfo.FirstLocal) (ContinuousIntegrationBuild for Release makes them /_/...)"
                 }
-                if ($pdbWarning) { Write-Warning "$($p.Name) $($fw.Name): $pdbWarning" }
-                else { Write-Note "Embedded pdb: $ownName ($($pdbInfo.Documents) source files, none under this machine's folders)" }
+                if ($pdbWarning) { throw $pdbWarning }
+                Write-Note "Embedded pdb: $ownName ($($pdbInfo.Documents) source files, none under this machine's folders)"
                 # what --sign signs (decided here: the signing machine has no build output or NuGet cache)
                 $pluginNames = @(switch ($p.Special) {
                         'RegistryPlugins' { Get-ChildItem -LiteralPath $registryPlugins -Filter *.dll -File | ForEach-Object Name }
@@ -1035,7 +1037,6 @@ function Invoke-Stage {
                     $toSign.Count, $entries.Count, ($entries.Count - $toSign.Count))
 
                 $note = if ($singleGui) { 'staged (single file)' } else { 'staged' }
-                if ($pdbWarning) { $note += $(if ($pdbInfo -and $pdbInfo.Embedded) { '; warning: local paths in its pdb' } else { '; warning: no embedded pdb' }) }
                 $results.Add([pscustomobject]@{ Program = $p.Name; Framework = $fw.Name; Result = $note })
             }
             catch {
