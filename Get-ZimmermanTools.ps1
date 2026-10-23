@@ -26,7 +26,10 @@
 	
 	.PARAMETER Sync
 		A switch to tell Get-ZimmermanTools to run the --sync command for each of EvtxECmd, SQLECmd, and RECmd
-	
+
+	.PARAMETER NoUpdate
+		Do not check for a newer version of this script before downloading. By default, if a newer version is available, it replaces this script and the script stops so it can be run again
+
 	.EXAMPLE
 		C:\PS> Get-ZimmermanTools.ps1 -Dest c:\tools
 		Downloads/extracts and saves details about programs to c:\tools directory.
@@ -60,7 +63,9 @@ param
 	[Alias('pdc')]
 	[switch]$ProxyUseDefaultCredentials,
 	[Alias('s')]
-	[switch]$Sync
+	[switch]$Sync,
+	[Alias('nu')]
+	[switch]$NoUpdate
 )
 
 
@@ -137,6 +142,118 @@ function Expand-Zip
 	}
 }
 
+function Get-ScriptText
+{
+	<#
+	.SYNOPSIS
+		Returns a script's text without its signature block and with LF line endings, so copies that differ only by signature or line endings compare equal
+	#>
+	param
+	(
+		[string]$Text
+	)
+
+	$sigStart = $Text.IndexOf('# SIG # Begin signature block')
+	if ($sigStart -ge 0)
+	{
+		$Text = $Text.Substring(0, $sigStart)
+	}
+
+	return $Text.Replace("`r`n", "`n").TrimEnd()
+}
+
+function Update-Self
+{
+	<#
+	.SYNOPSIS
+		Downloads the current release of this script and, if it differs from the running copy, extracts it over the running copy. Returns $true when the script was updated
+	#>
+	param
+	(
+		[System.Net.Http.HttpClient]$Client,
+		[string]$Url
+	)
+
+	$scriptPath = $PSCommandPath
+	if (!$scriptPath)
+	{
+		#Not run from a file (pasted or piped in), so there is nothing to update
+		return $false
+	}
+	$scriptDir = Split-Path -Parent $scriptPath
+	$scriptName = Split-Path -Leaf $scriptPath
+
+	if (Test-Path -LiteralPath (Join-Path $scriptDir '.git'))
+	{
+		#A repository's working copy is never replaced by the released script
+		return $false
+	}
+
+	Write-Color -Text "* ", "Checking for a newer version of this script..." -Color Green
+
+	$zipFile = $null
+	try
+	{
+		$bytes = $Client.GetByteArrayAsync($Url).GetAwaiter().GetResult()
+
+		$zip = New-Object System.IO.Compression.ZipArchive((New-Object System.IO.MemoryStream(, $bytes)), [System.IO.Compression.ZipArchiveMode]::Read)
+		try
+		{
+			$entry = $zip.Entries | Where-Object { $_.Name -eq 'Get-ZimmermanTools.ps1' } | Select-Object -First 1
+			if ($null -eq $entry)
+			{
+				throw "Get-ZimmermanTools.ps1 is not in $Url"
+			}
+
+			$reader = New-Object System.IO.StreamReader($entry.Open())
+			try
+			{
+				$remoteText = $reader.ReadToEnd()
+			}
+			finally
+			{
+				$reader.Dispose()
+			}
+		}
+		finally
+		{
+			$zip.Dispose()
+		}
+
+		$localText = [IO.File]::ReadAllText($scriptPath)
+
+		if ((Get-ScriptText $remoteText) -eq (Get-ScriptText $localText))
+		{
+			Write-Color -Text "* ", "This script is current." -Color Green
+			return $false
+		}
+
+		$zipFile = [IO.Path]::Combine($scriptDir, "Get-ZimmermanTools.zip.$([guid]::NewGuid().ToString('N')).download")
+		[IO.File]::WriteAllBytes($zipFile, $bytes)
+		Expand-Zip -Path $zipFile -Destination $scriptDir
+
+		#The release is always named Get-ZimmermanTools.ps1. If this copy was renamed, replace it too so the next run is the new version
+		if ($scriptName -ne 'Get-ZimmermanTools.ps1')
+		{
+			Copy-Item -LiteralPath (Join-Path $scriptDir 'Get-ZimmermanTools.ps1') -Destination $scriptPath -Force
+		}
+
+		return $true
+	}
+	catch
+	{
+		Write-Color -Text "* ", "Unable to check for a newer version of this script ($($_.Exception.GetBaseException().Message)). Continuing with this version" -Color Yellow
+		return $false
+	}
+	finally
+	{
+		if ($null -ne $zipFile -and (Test-Path -LiteralPath $zipFile))
+		{
+			Remove-Item -LiteralPath $zipFile -Force
+		}
+	}
+}
+
 Add-Type -AssemblyName System.Net.Http, System.IO.Compression, System.IO.Compression.FileSystem
 
 #Windows PowerShell only allows 2 connections per host by default (which defeats the parallel downloads below) and may not offer TLS 1.2
@@ -167,6 +284,14 @@ $client.DefaultRequestHeaders.UserAgent.ParseAdd('Get-ZimmermanTools')
 
 #How many downloads to run at the same time
 $maxConcurrent = 6
+
+if (!$NoUpdate -and (Update-Self -Client $client -Url "https://download.ericzimmermanstools.com/Get-ZimmermanTools.zip"))
+{
+	Write-Color -LinesBefore 1 -Text "* ", "A new version of Get-ZimmermanTools is available and has been saved to '$PSCommandPath'." -Color Green, Yellow
+	Write-Color -Text "* ", "Run the script again to use it." -Color Green, Yellow -LinesAfter 1
+	$client.Dispose()
+	return
+}
 
 Write-Color -LinesBefore 1 "This script will discover and download all available programs" -BackgroundColor Blue
 Write-Color "from https://ericzimmerman.github.io and download them to $Dest" -BackgroundColor Blue -LinesAfter 1

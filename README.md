@@ -3,6 +3,8 @@ This script will auto-discover all available downloads and download what does no
 
 The script does not check for what is on disk, but uses what is in a CSV file that this script generates to know what to download based on SHA-1 hash.
 
+Before downloading anything, the script checks for a newer version of itself. If there is one, it replaces the script with it and stops: run it again to use the new version. `-NoUpdate` skips the check.
+
 # Build-ZimmermanTools (maintainers)
 
 `Build-ZimmermanTools.ps1` builds every EZ Tools program from its repository (cloned next to this one), stages each as its download zip is laid out, signs them and makes the download zips. It is for building releases; users only need `Get-ZimmermanTools.ps1`.
