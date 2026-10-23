@@ -28,4 +28,4 @@ No automated tests. Verify a change by staging a few programs to a temp folder (
 
 ## Versioning and release
 
-No version. `Get-ZimmermanTools.ps1` is released by zipping it to the download share (`Get-ZimmermanTools.zip`, the script's `script` entry). The website (`ericzimmerman.github.io`) links to the same URLs: its links and the share's layout must change together.
+No version. `Get-ZimmermanTools.ps1` is released by zipping it to the download share (`Get-ZimmermanTools.zip`, the script's `script` entry). The website (`ericzimmerman.github.io`) links to the same URLs: its links and the share's layout must change together. With every release, update the README.md of each tool whose version changed (Eric, 2026-10-23): the version, the command line block copied from the shipped binary's `--help`, the examples and "What's new", in the standard format of LECmd's README.
