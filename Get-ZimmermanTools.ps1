@@ -37,6 +37,7 @@
 	.NOTES
 		Author: Eric Zimmerman
 		Date:   January 22, 2022
+		Updated: October 23, 2026
 #>
 [CmdletBinding(DefaultParameterSetName = 'NoProxy')]
 param
@@ -153,10 +154,11 @@ function Get-ScriptText
 		[string]$Text
 	)
 
-	$sigStart = $Text.IndexOf('# SIG # Begin signature block')
-	if ($sigStart -ge 0)
+	#The signature block is the last line that is exactly its marker (this function's own pattern is never alone on a line)
+	$sig = [regex]::Matches($Text, '(?m)^# SIG # Begin signature block\r?$')
+	if ($sig.Count -gt 0)
 	{
-		$Text = $Text.Substring(0, $sigStart)
+		$Text = $Text.Substring(0, $sig[$sig.Count - 1].Index)
 	}
 
 	return $Text.Replace("`r`n", "`n").TrimEnd()
