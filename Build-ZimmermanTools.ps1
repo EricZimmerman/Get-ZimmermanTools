@@ -25,6 +25,13 @@
         Explorer's default Settings, XWFIM's text files) are taken from the current release zips, downloaded once
         (from the page Get-ZimmermanTools.ps1 reads) into %TEMP%\Build-ZimmermanTools\_release
 
+    Pulling: staging first pulls this script's repository (when the pull changes the script, the new one runs with
+    the same arguments), then every repository the selected programs are built from (the project's, those it
+    references, the maps', the plugins'): git fetch, then a fast-forward of the branch to its upstream, never a merge
+    or a rebase. Local commits that aren't pushed are kept (a warning). A program whose repository can't be brought
+    up to date (diverged from its upstream, no upstream or detached HEAD, a failed fetch, uncommitted changes in
+    files the pull changes) is not built: it fails in the summary and what an earlier run staged for it is removed.
+
     The build output is in %TEMP%\Build-ZimmermanTools\_build: -Out (which can be a share) only gets the staged
     programs, a copy of this script, _staged.txt and _sign.txt. The copy is replaced by every staging run, so the one in -Out is
     always the current one.
@@ -621,6 +628,77 @@ function Copy-Into([string]$source, [string]$dest) {
     }
 }
 
+# git with its output (stdout and stderr) as lines and the exit code in $LASTEXITCODE; git writes progress and hints to
+# stderr, which Windows PowerShell 5.1 turns into an error under $ErrorActionPreference Stop
+function Invoke-Git([string]$repo) {
+    $eap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { @(& git -C $repo @args 2>&1 | ForEach-Object { "$_" }) }
+    finally { $ErrorActionPreference = $eap }
+}
+
+# Fetch a repository and fast-forward its branch to its upstream, so nothing is built from a clone that is behind
+# (2026-10-23: the Linux sessions push version bumps, and seven programs were first built from clones a commit or two
+# behind). Returns $null when the repository is current, else why it can't be used. Never merges or rebases: local
+# commits that aren't pushed are kept (a warning); a branch that has diverged from its upstream, no upstream, a failed
+# fetch or uncommitted changes in files the pull would change fail it
+function Update-Repo([string]$repo) {
+    $name = Split-Path $repo -Leaf
+    if (-not (Test-Path -LiteralPath (Join-Path $repo '.git'))) { return "$name is not a git repository" }
+    $branch = Invoke-Git $repo symbolic-ref --short -q HEAD
+    if ($LASTEXITCODE -ne 0) { return "$name is not on a branch (detached HEAD)" }
+    $upstream = Invoke-Git $repo rev-parse --abbrev-ref --symbolic-full-name '@{u}'
+    if ($LASTEXITCODE -ne 0) { return "$name's branch $branch has no upstream to pull from" }
+    $out = Invoke-Git $repo fetch --quiet
+    if ($LASTEXITCODE -ne 0) { return "git fetch failed in $name`: $($out -join ' ')" }
+
+    $before = Invoke-Git $repo rev-parse --short HEAD
+    $out = Invoke-Git $repo merge --ff-only --quiet '@{u}'
+    if ($LASTEXITCODE -ne 0) {
+        $behind = Invoke-Git $repo rev-list --count 'HEAD..@{u}'
+        $ahead = Invoke-Git $repo rev-list --count '@{u}..HEAD'
+        return "can't fast-forward $name $branch to $upstream ($ahead local, $behind new commit(s)): $(($out | Where-Object { $_ -notlike 'hint:*' } | Select-Object -First 2) -join ' ')"
+    }
+    $after = Invoke-Git $repo rev-parse --short HEAD
+    $ahead = [int]"$(Invoke-Git $repo rev-list --count '@{u}..HEAD')"
+    if ("$before" -ne "$after") {
+        $count = Invoke-Git $repo rev-list --count "$before..$after"
+        Write-Host "   $name`: pulled $count commit(s), $before -> $after" -ForegroundColor Yellow
+    }
+    else { Write-Note "$name`: up to date ($branch $after)" }
+    if ($ahead -gt 0) { Write-Warning "$name has $ahead local commit(s) that are not pushed: built with them" }
+    return $null
+}
+
+# The repositories (folder names under -Root) a program is built from: its project's, the Copy sources', the plugins'
+# (Special), and those its project references (followed through each referenced project; paths with an MSBuild
+# property, such as Timeline Explorer's $(TlePlugins), are not resolved: Special names that repository)
+function Get-ProgramRepos($p) {
+    $repos = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($rel in @($p.Project, $p.Script) + @($p.Copy.Keys) | Where-Object { $_ }) { [void]$repos.Add(($rel -split '[\\/]')[0]) }
+    switch ($p.Special) {
+        'RegistryPlugins' { [void]$repos.Add('RegistryPlugins') }
+        'TlePlugins' { [void]$repos.Add('tlefileplugins') }
+    }
+
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $queue = New-Object System.Collections.Generic.Queue[string]
+    if ($p.Project) { $queue.Enqueue([IO.Path]::GetFullPath((Join-Path $Root $p.Project))) }
+    while ($queue.Count) {
+        $proj = $queue.Dequeue()
+        if (-not $seen.Add($proj) -or -not (Test-Path -LiteralPath $proj)) { continue }
+        foreach ($m in [regex]::Matches((Get-Content -LiteralPath $proj -Raw), '<ProjectReference\s+Include="([^"$]+)"')) {
+            $ref = [IO.Path]::GetFullPath((Join-Path (Split-Path $proj) ($m.Groups[1].Value -replace '/', '\')))
+            if ($ref.StartsWith("$rootFull\", [StringComparison]::OrdinalIgnoreCase)) {
+                [void]$repos.Add(($ref.Substring($rootFull.Length + 1) -split '\\')[0])
+                $queue.Enqueue($ref)
+            }
+        }
+    }
+    return @($repos)
+}
+
 # A repository's folder or file (<repo>\<path>, under -Root) as committed at HEAD, byte for byte what GitHub has: the
 # Windows working copy has CRLF where git stores LF (core.autocrlf), and --sync (EvtxECmd, SQLECmd, RECmd), which
 # downloads master from GitHub, compares bytes, so every map looked updated. Uncommitted changes are left out (a
@@ -786,6 +864,21 @@ function Invoke-Stage {
         throw "None of the repositories are in '$Root' (the folder above this script, unless --root is given). Run the script from its repository (D:\Code\get-zimmermantools) or give --root <the folder with the repositories>, such as --root D:\Code"
     }
 
+    # every repository a selected program is built from is pulled first (fast-forward only), so the build is what is
+    # pushed; a program whose repository can't be brought up to date fails instead of being built from an old clone
+    $repoFailed = @{}
+    $repoNames = @(@($selected | ForEach-Object { Get-ProgramRepos $_ }) | Sort-Object -Unique |
+        Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) })
+    Write-Host '== ' -ForegroundColor Red -NoNewline
+    Write-Host "Pulling $($repoNames.Count) repositories" -ForegroundColor Green
+    foreach ($r in $repoNames) {
+        $why = Update-Repo (Join-Path $Root $r)
+        if ($why) {
+            $repoFailed[$r] = $why
+            Write-Host "   $why" -ForegroundColor Red
+        }
+    }
+
     $registryPlugins = $null
     $tlePlugins = $null
     # the files --sign signs (written to <Out>\_sign.txt), and the staged programs this run replaced (Program\fw)
@@ -793,6 +886,18 @@ function Invoke-Stage {
     $stagedKeys = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 
     foreach ($p in $selected) {
+        $stale = @(Get-ProgramRepos $p | Where-Object { $repoFailed.ContainsKey($_) })
+        if ($stale) {
+            Write-Host '== ' -ForegroundColor Red -NoNewline
+            Write-Host $p.Name -ForegroundColor Green
+            Write-Host "   $($p.Name): not built, $($stale -join ', ') could not be pulled" -ForegroundColor Red
+            # as a failed build does: what an earlier run staged is removed, so --zip can't ship it
+            $old = Join-Path $Out $p.Name
+            if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force }
+            $results.Add([pscustomobject]@{ Program = $p.Name; Framework = '-'; Result = "FAILED: not pulled: $(($stale | ForEach-Object { $repoFailed[$_] }) -join '; ')" })
+            continue
+        }
+
         # a script (Get-ZimmermanTools.ps1): copied as it is into <Out>\<Name>\script, signed there by --sign (the
         # repository's copy stays unsigned) and zipped at the top
         if ($p.Script) {
@@ -1293,7 +1398,25 @@ if ($stagedFrom) {
     Write-Host "Staged folder $Staged ($($lines[0]))"
     $lines | Where-Object { $_ -like 'FAILED *' } | ForEach-Object { Write-Host "   $_ (not staged: not in the zips)" -ForegroundColor Red }
 }
-if ($Out) { Invoke-Stage }
+if ($Out) {
+    # this script's own repository first: when the pull changes the script, the new one runs with the same arguments
+    # (once: BUILD_ZT_PULLED stops a loop)
+    if ((Test-Path -LiteralPath (Join-Path $PSScriptRoot '.git')) -and -not $env:BUILD_ZT_PULLED) {
+        Write-Host '== ' -ForegroundColor Red -NoNewline
+        Write-Host 'Pulling get-zimmermantools (this script)' -ForegroundColor Green
+        $selfBefore = (Get-FileHash -LiteralPath $PSCommandPath).Hash
+        $why = Update-Repo $PSScriptRoot
+        if ($why) { throw "This script's repository could not be pulled: $why" }
+        if ((Get-FileHash -LiteralPath $PSCommandPath).Hash -ne $selfBefore) {
+            Write-Host "   Build-ZimmermanTools.ps1 changed: running the new one" -ForegroundColor Yellow
+            $env:BUILD_ZT_PULLED = '1'
+            try { & $PSCommandPath @PSBoundParameters }
+            finally { Remove-Item Env:BUILD_ZT_PULLED -ErrorAction SilentlyContinue }
+            exit $LASTEXITCODE
+        }
+    }
+    Invoke-Stage
+}
 if ($Sign) { Invoke-Sign $Sign }
 # zips only with every file signed: a signing failure leaves the download folder as it was
 if ($Zip -and $Sign -and $script:signFailed) { Write-Host "Not zipping: signing failed" -ForegroundColor Red }
