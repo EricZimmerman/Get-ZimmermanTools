@@ -37,7 +37,7 @@
 	.NOTES
 		Author: Eric Zimmerman
 		Date:   January 22, 2022
-		Updated: October 23, 2026
+		Updated: November 16, 2026
 #>
 [CmdletBinding(DefaultParameterSetName = 'NoProxy')]
 param
@@ -569,7 +569,10 @@ if ($NetVersion -ne 4 -and (Test-Path -Path (Join-Path $Dest "net9")))
 #Failed downloads are left out so they are retried on the next run
 Write-Color -LinesBefore 1 -Text "* ", "Saving downloaded version information to $localDetailsFile" -Color Green -LinesAfter 1
 
-$currentDetails | Sort-Object -Property URL | Export-Csv -Path $localDetailsFile -NoTypeInformation
+#PowerShell 6+ never writes type information and warns that -NoTypeInformation is obsolete; 5.1 needs it
+$csvOptions = @{ }
+if ($PSVersionTable.PSVersion.Major -lt 6) { $csvOptions.NoTypeInformation = $true }
+$currentDetails | Sort-Object -Property URL | Export-Csv -Path $localDetailsFile @csvOptions
 
 #We need to sync the Maps for EvtxECmd and SQLECmd, and the batch files for RECmd
 #Reference: https://www.youtube.com/watch?v=mIb1GQP3ciE
